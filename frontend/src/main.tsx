@@ -12,7 +12,14 @@ import utc from 'dayjs/plugin/utc'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { initAnalytics } from './analytics/posthog'
+import { trackLaunch } from './analytics/lifecycle'
 import './index.css'
+
+// 初始化产品分析 / 埋点（无 key 时自动 no-op，不发任何网络请求）
+initAnalytics()
+// 注册全局属性 + 上报启动/安装/更新事件
+void trackLaunch()
 
 // 配置dayjs插件
 dayjs.extend(relativeTime)

@@ -2,6 +2,11 @@ import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
 import { apiConfigManager } from '../utils/apiConfig'
+import {
+  trackVideoImported,
+  trackClipsExported,
+  trackProcessingFailed,
+} from '../analytics/events'
 
 // 扩展Axios配置类型
 declare module 'axios' {
@@ -246,11 +251,26 @@ export const projectApi = {
       formData.append('video_category', data.video_category)
     }
     
-    return api.post('/projects/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+    try {
+      const project = await api.post<unknown, Project>('/projects/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      trackVideoImported({
+        source: 'upload',
+        fileType: data.video_file?.type || undefined,
+        sizeBytes: data.video_file?.size,
+      })
+      return project
+    } catch (error: any) {
+      trackProcessingFailed({
+        stage: 'import',
+        message: error?.message,
+        code: error?.response?.status,
+      })
+      throw error
+    }
   },
 
   // 删除项目
@@ -481,10 +501,20 @@ export const projectApi = {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(downloadUrl)
-      
+
+      trackClipsExported({
+        clipCount: 1,
+        // 区分导出粒度：单切片 / 合集 / 整片
+        exportType: clipId ? 'clip' : collectionId ? 'collection' : 'project',
+      })
       return response.data
-    } catch (error) {
+    } catch (error: any) {
       console.error('下载失败:', error)
+      trackProcessingFailed({
+        stage: 'export',
+        message: error?.message,
+        code: error?.response?.status,
+      })
       throw error
     }
   },
@@ -549,12 +579,16 @@ export const bilibiliApi = {
 
   // 创建B站下载任务
   createDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
-    return api.post('/bilibili/download', data)
+    const task = await api.post<unknown, BilibiliDownloadTask>('/bilibili/download', data)
+    trackVideoImported({ source: 'url', fileType: 'bilibili' })
+    return task
   },
 
   // 创建YouTube下载任务
   createYouTubeDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
-    return api.post('/youtube/download', data)
+    const task = await api.post<unknown, BilibiliDownloadTask>('/youtube/download', data)
+    trackVideoImported({ source: 'url', fileType: 'youtube' })
+    return task
   },
 
   // 获取下载任务状态

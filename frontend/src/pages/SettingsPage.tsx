@@ -5,6 +5,8 @@ import { settingsApi } from '../services/api'
 import BilibiliManager from '../components/BilibiliManager'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
 import { isDesktopMode } from '../utils/desktopMode'
+import { trackApiKeyConfigured } from '../analytics/events'
+import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import './SettingsPage.css'
 
 const { Content } = Layout
@@ -17,6 +19,7 @@ const SettingsPage: React.FC = () => {
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
   const [currentProvider, setCurrentProvider] = useState<any>({})
   const [selectedProvider, setSelectedProvider] = useState('dashscope')
+  const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
 
   // 提供商配置
   const providerConfig = {
@@ -219,6 +222,16 @@ const SettingsPage: React.FC = () => {
       
       await settingsApi.updateSettings(backendSettings)
       message.success('配置保存成功！')
+
+      // 埋点：记录配置了哪个 provider 的 key（不传 key 明文）
+      const apiKeyField = providerConfig[selectedProvider as keyof typeof providerConfig]?.apiKeyField
+      if (apiKeyField) {
+        trackApiKeyConfigured({
+          provider: selectedProvider,
+          hasKey: !!values[apiKeyField],
+        })
+      }
+
       await loadData() // 重新加载数据
     } catch (error: any) {
       message.error('保存失败: ' + (error.message || '未知错误'))
@@ -568,6 +581,32 @@ const SettingsPage: React.FC = () => {
               />
               
               <AppSettings />
+            </Card>
+
+            <Card title="隐私与数据" className="settings-card" style={{ marginTop: 16 }}>
+              <Alert
+                message="使用数据统计"
+                description="为了改进产品，我们会采集匿名的使用数据（如功能使用、出片成功/失败等），不包含你的视频内容、字幕文本或 API 密钥。你可以随时关闭。"
+                type="info"
+                showIcon
+                className="settings-alert"
+              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                <div>
+                  <Text strong>允许匿名使用统计</Text>
+                  <Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
+                    关闭后将不再上报任何使用数据。
+                  </Paragraph>
+                </div>
+                <Switch
+                  checked={analyticsOn}
+                  onChange={(checked) => {
+                    setAnalyticsEnabled(checked)
+                    setAnalyticsOn(checked)
+                    message.success(checked ? '已开启匿名使用统计' : '已关闭匿名使用统计')
+                  }}
+                />
+              </div>
             </Card>
           </TabPane>
 
