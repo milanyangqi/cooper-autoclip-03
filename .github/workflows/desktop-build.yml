@@ -22,6 +22,12 @@ on:
     tags:
       - 'v*'
 
+# Needed by softprops/action-gh-release to create the Release and upload the
+# DMG. Without this the default GITHUB_TOKEN is read-only and the release step
+# fails with "Resource not accessible by integration" (403).
+permissions:
+  contents: write
+
 jobs:
   build-macos-arm64:
     runs-on: macos-14  # Apple Silicon runner
