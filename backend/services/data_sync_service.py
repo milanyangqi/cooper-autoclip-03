@@ -170,7 +170,7 @@ class DataSyncService:
                 else:
                     logger.info(f"切片文件不存在: {clips_file}")
             
-            if not clips_data:
+            if clips_data is None:
                 logger.info(f"项目 {project_id} 没有找到切片数据")
                 return 0
             
@@ -183,6 +183,7 @@ class DataSyncService:
             
             synced_count = 0
             updated_count = 0
+            active_clip_ids = set()
             for clip_data in clips_data:
                 try:
                     # 检查切片是否已存在
@@ -204,7 +205,16 @@ class DataSyncService:
                         project_dir = get_project_directory(project_id)
                         project_clips_dir = project_dir / "output" / "clips"
                         project_clips_dir.mkdir(parents=True, exist_ok=True)
-                        project_video_path = project_clips_dir / f"{clip_id}_{safe_title}.mp4"
+                        metadata_video_path = clip_data.get("video_path")
+                        if metadata_video_path and Path(metadata_video_path).exists():
+                            project_video_path = Path(metadata_video_path)
+                        else:
+                            actual_matches = sorted(
+                                project_clips_dir.glob(f"{clip_id}_*.mp4"),
+                                key=lambda path: path.stat().st_mtime,
+                                reverse=True,
+                            )
+                            project_video_path = actual_matches[0] if actual_matches else project_clips_dir / f"{clip_id}_{safe_title}.mp4"
                         
                         # 兼容旧的全局输出目录，如果存在则迁移到项目目录
                         from ..core.path_utils import get_data_directory
@@ -224,6 +234,7 @@ class DataSyncService:
                         existing_clip.clip_metadata = clip_data
                         if existing_clip.tags is None:
                             existing_clip.tags = []  # 确保tags是空列表而不是null
+                        active_clip_ids.add(existing_clip.id)
                         updated_count += 1
                         continue
                     
@@ -243,18 +254,25 @@ class DataSyncService:
                     project_clips_dir.mkdir(parents=True, exist_ok=True)
                     
                     # 查找实际的文件名（保留特殊字符）
-                    actual_filename = None
-                    for file_path in project_clips_dir.glob(f"{clip_id}_*.mp4"):
-                        actual_filename = file_path.name
-                        break
-                    
-                    if actual_filename:
-                        project_video_path = project_clips_dir / actual_filename
+                    metadata_video_path = clip_data.get("video_path")
+                    if metadata_video_path and Path(metadata_video_path).exists():
+                        project_video_path = Path(metadata_video_path)
+                        actual_filename = project_video_path.name
                     else:
-                        # 如果找不到实际文件，使用清理后的文件名作为后备
-                        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                        safe_title = safe_title.replace(' ', '_')
-                        project_video_path = project_clips_dir / f"{clip_id}_{safe_title}.mp4"
+                        actual_matches = sorted(
+                            project_clips_dir.glob(f"{clip_id}_*.mp4"),
+                            key=lambda path: path.stat().st_mtime,
+                            reverse=True,
+                        )
+                        if actual_matches:
+                            project_video_path = actual_matches[0]
+                            actual_filename = project_video_path.name
+                        else:
+                            actual_filename = None
+                            # 如果找不到实际文件，使用清理后的文件名作为后备
+                            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                            safe_title = safe_title.replace(' ', '_')
+                            project_video_path = project_clips_dir / f"{clip_id}_{safe_title}.mp4"
                     
                     # 兼容旧的全局输出目录，如果存在则迁移到项目目录
                     global_clips_dir = get_data_directory() / "output" / "clips"
@@ -289,18 +307,46 @@ class DataSyncService:
                     )
                     
                     self.db.add(clip)
+                    self.db.flush()
+                    active_clip_ids.add(clip.id)
                     synced_count += 1
                     
                 except Exception as e:
                     logger.error(f"同步切片失败: {e}")
                     continue
             
+            stale_count = self._delete_stale_clips(project_id, active_clip_ids)
             self.db.commit()
-            logger.info(f"项目 {project_id} 同步了 {synced_count} 个切片，更新了 {updated_count} 个切片")
+            logger.info(
+                f"项目 {project_id} 同步了 {synced_count} 个切片，更新了 {updated_count} 个切片，移除了 {stale_count} 个旧切片"
+            )
             return synced_count
             
         except Exception as e:
             logger.error(f"同步切片数据失败: {str(e)}")
+            return 0
+
+    def _delete_stale_clips(self, project_id: str, active_clip_ids: set) -> int:
+        """移除本次 metadata 中不存在的旧切片记录。"""
+        try:
+            from ..models.collection import clip_collection
+
+            query = self.db.query(Clip).filter(Clip.project_id == project_id)
+            if active_clip_ids:
+                query = query.filter(~Clip.id.in_(active_clip_ids))
+            stale_clips = query.all()
+
+            for clip in stale_clips:
+                self.db.execute(
+                    clip_collection.delete().where(clip_collection.c.clip_id == clip.id)
+                )
+                self.db.delete(clip)
+
+            if stale_clips:
+                logger.info(f"项目 {project_id} 移除了 {len(stale_clips)} 个旧切片记录")
+            return len(stale_clips)
+        except Exception as e:
+            logger.warning(f"移除旧切片记录失败: {e}")
             return 0
     
     def _sync_collections_from_filesystem(self, project_id: str, project_dir: Path) -> int:
@@ -332,7 +378,7 @@ class DataSyncService:
                 else:
                     logger.info(f"合集文件不存在: {collections_file}")
             
-            if not collections_data:
+            if collections_data is None:
                 logger.info(f"项目 {project_id} 没有找到合集数据")
                 return 0
             
@@ -355,6 +401,7 @@ class DataSyncService:
                     logger.warning(f"读取删除记录失败: {e}")
             
             synced_count = 0
+            active_collection_ids = set()
             for collection_data in collections_data:
                 try:
                     collection_id = collection_data.get("id", "")
@@ -479,6 +526,8 @@ class DataSyncService:
                         collection.video_path = video_path
                         collection.export_path = video_path  # 设置export_path
                         logger.info(f"更新现有合集: {collection.id}")
+
+                    active_collection_ids.add(collection.id)
                     
                     # 建立合集和切片的关联关系
                     for i, clip_id in enumerate(uuid_clip_ids):
@@ -517,12 +566,36 @@ class DataSyncService:
                     logger.error(f"同步合集失败: {e}")
                     continue
             
+            stale_count = self._delete_stale_collections(project_id, active_collection_ids)
             self.db.commit()
-            logger.info(f"项目 {project_id} 同步了 {synced_count} 个合集")
+            logger.info(f"项目 {project_id} 同步了 {synced_count} 个合集，移除了 {stale_count} 个旧合集")
             return synced_count
             
         except Exception as e:
             logger.error(f"同步合集数据失败: {str(e)}")
+            return 0
+
+    def _delete_stale_collections(self, project_id: str, active_collection_ids: set) -> int:
+        """移除本次 metadata 中不存在的旧合集记录。"""
+        try:
+            from ..models.collection import clip_collection
+
+            query = self.db.query(Collection).filter(Collection.project_id == project_id)
+            if active_collection_ids:
+                query = query.filter(~Collection.id.in_(active_collection_ids))
+            stale_collections = query.all()
+
+            for collection in stale_collections:
+                self.db.execute(
+                    clip_collection.delete().where(clip_collection.c.collection_id == collection.id)
+                )
+                self.db.delete(collection)
+
+            if stale_collections:
+                logger.info(f"项目 {project_id} 移除了 {len(stale_collections)} 个旧合集记录")
+            return len(stale_collections)
+        except Exception as e:
+            logger.warning(f"移除旧合集记录失败: {e}")
             return 0
     
     def sync_project_data(self, project_id: str, project_dir: Path) -> Dict[str, Any]:

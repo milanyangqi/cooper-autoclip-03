@@ -159,11 +159,13 @@ class VideoProcessor:
 
             # 构建精确切割命令。重新编码可避免关键帧 copy 导致的起点漂移，
             # 确保切片视频与按同一时间窗裁剪出的 SRT 保持同步。
+            # 将 -ss 放在 -i 前面可避免尾段切片时从视频开头完整解码到起点；
+            # 在转码模式下 ffmpeg 仍会对 seek 位置进行精确处理。
             ffmpeg_bin = get_ffmpeg_path()
             cmd = [
                 ffmpeg_bin,
-                '-i', str(input_video),
                 '-ss', ffmpeg_start_time,
+                '-i', str(input_video),
                 '-t', str(duration),  # 使用持续时间而不是绝对结束时间
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
