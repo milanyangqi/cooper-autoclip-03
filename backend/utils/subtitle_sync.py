@@ -165,11 +165,12 @@ def write_clipped_srt(
     output_path: Path,
     window_start: float,
     window_end: float,
+    extend_last_to_window_end: bool = False,
 ) -> int:
     """写出相对片段 0 秒起算的 SRT。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     lines: List[str] = []
-    count = 0
+    clipped_entries: List[Dict[str, Any]] = []
 
     for entry in entries:
         entry_start = max(float(entry["start_seconds"]), window_start)
@@ -177,9 +178,23 @@ def write_clipped_srt(
         if entry_end <= entry_start:
             continue
 
+        clipped_entries.append({
+            "start_seconds": entry_start,
+            "end_seconds": entry_end,
+            "text": str(entry.get("text", "")).strip(),
+        })
+
+    if extend_last_to_window_end and clipped_entries:
+        clipped_entries[-1]["end_seconds"] = max(
+            float(clipped_entries[-1]["end_seconds"]),
+            window_end,
+        )
+
+    count = 0
+    for entry in clipped_entries:
         count += 1
-        relative_start = max(0.0, entry_start - window_start)
-        relative_end = max(relative_start, entry_end - window_start)
+        relative_start = max(0.0, float(entry["start_seconds"]) - window_start)
+        relative_end = max(relative_start, float(entry["end_seconds"]) - window_start)
         lines.extend([
             str(count),
             f"{seconds_to_srt_time(relative_start)} --> {seconds_to_srt_time(relative_end)}",

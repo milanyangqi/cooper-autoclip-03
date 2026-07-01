@@ -136,3 +136,23 @@ def test_clipped_srt_never_exceeds_video_window(tmp_path):
     assert count == 2
     assert "00:00:04,500" in content
     assert "00:00:04,800" not in content
+
+
+def test_clipped_srt_can_extend_last_subtitle_to_video_end(tmp_path):
+    output_path = tmp_path / "clip.srt"
+    entries = [
+        _entry(1.0, 3.0, "First sentence."),
+        _entry(3.1, 5.0, "Second sentence."),
+    ]
+
+    count = write_clipped_srt(
+        entries,
+        output_path,
+        1.0,
+        5.5,
+        extend_last_to_window_end=True,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+    assert count == 2
+    assert "00:00:04,500" in content

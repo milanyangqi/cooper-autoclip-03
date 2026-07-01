@@ -123,7 +123,13 @@ class VideoGenerator:
                     )
                 matched_entries = collect_overlapping_entries(subtitle_entries, start_seconds, subtitle_end_seconds)
                 subtitle_path = self._clip_subtitle_output_path(clip)
-                subtitle_count = write_clipped_srt(matched_entries, subtitle_path, start_seconds, end_seconds)
+                subtitle_count = write_clipped_srt(
+                    matched_entries,
+                    subtitle_path,
+                    start_seconds,
+                    end_seconds,
+                    extend_last_to_window_end=end_seconds > subtitle_end_seconds,
+                )
                 clip["subtitle_path"] = str(subtitle_path)
                 clip["subtitle_source_path"] = str(subtitle_source_path) if subtitle_source_path else None
                 clip["sentence_count"] = clip.get("sentence_count", subtitle_count)
