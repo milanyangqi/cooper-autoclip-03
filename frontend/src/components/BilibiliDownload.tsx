@@ -18,6 +18,9 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
   const [projectName, setProjectName] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [selectedBrowser, setSelectedBrowser] = useState<string>('')
+  const [targetClipCount, setTargetClipCount] = useState('')
+  const [minClipDurationSec, setMinClipDurationSec] = useState('')
+  const [maxClipDurationSec, setMaxClipDurationSec] = useState('')
   const [categories, setCategories] = useState<VideoCategory[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -103,6 +106,40 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       return 'youtube'
     }
     return null
+  }
+
+  const parsePositiveInt = (value: string, label: string): number | undefined | null => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+
+    const parsed = Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      message.error(`${label}必须是正整数`)
+      return null
+    }
+
+    return parsed
+  }
+
+  const getClipSelectionPayload = (): Record<string, number> | null => {
+    const targetCount = parsePositiveInt(targetClipCount, '生成片段数量')
+    const minDuration = parsePositiveInt(minClipDurationSec, '最短时长')
+    const maxDuration = parsePositiveInt(maxClipDurationSec, '最长时长')
+
+    if (targetCount === null || minDuration === null || maxDuration === null) {
+      return null
+    }
+
+    if (minDuration !== undefined && maxDuration !== undefined && minDuration > maxDuration) {
+      message.error('最短时长不能大于最长时长')
+      return null
+    }
+
+    const payload: Record<string, number> = {}
+    if (targetCount !== undefined) payload.target_clip_count = targetCount
+    if (minDuration !== undefined) payload.min_clip_duration_sec = minDuration
+    if (maxDuration !== undefined) payload.max_clip_duration_sec = maxDuration
+    return payload
   }
 
   const parseVideoInfo = async () => {
@@ -203,12 +240,18 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       return
     }
 
+    const clipSelectionPayload = getClipSelectionPayload()
+    if (clipSelectionPayload === null) {
+      return
+    }
+
     setDownloading(true)
     
     try {
       const requestBody: any = {
         url: url.trim(),
-        video_category: selectedCategory
+        video_category: selectedCategory,
+        ...clipSelectionPayload
       }
       
       if (projectName.trim()) {
@@ -418,6 +461,70 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                 </Text>
               </div>
               
+              <div>
+                <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>片段控制（可选）</Text>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: '10px'
+                }}>
+                  <div>
+                    <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>生成数量</Text>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="自动"
+                      value={targetClipCount}
+                      onChange={(e) => setTargetClipCount(e.target.value)}
+                      style={{
+                        background: 'var(--ac-line-2)',
+                        border: '1px solid rgba(79, 172, 254, 0.3)',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        height: '40px'
+                      }}
+                      disabled={downloading}
+                    />
+                  </div>
+                  <div>
+                    <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最短时长（秒）</Text>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="不限"
+                      value={minClipDurationSec}
+                      onChange={(e) => setMinClipDurationSec(e.target.value)}
+                      style={{
+                        background: 'var(--ac-line-2)',
+                        border: '1px solid rgba(79, 172, 254, 0.3)',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        height: '40px'
+                      }}
+                      disabled={downloading}
+                    />
+                  </div>
+                  <div>
+                    <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最长时长（秒）</Text>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="不限"
+                      value={maxClipDurationSec}
+                      onChange={(e) => setMaxClipDurationSec(e.target.value)}
+                      style={{
+                        background: 'var(--ac-line-2)',
+                        border: '1px solid rgba(79, 172, 254, 0.3)',
+                        borderRadius: '8px',
+                        color: '#ffffff',
+                        height: '40px'
+                      }}
+                      disabled={downloading}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <Text style={{ color: '#ffffff', marginBottom: '12px', display: 'block', fontSize: '16px', fontWeight: 500 }}>视频分类</Text>
                 {loadingCategories ? (

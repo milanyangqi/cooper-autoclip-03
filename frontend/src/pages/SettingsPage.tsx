@@ -179,7 +179,7 @@ const SettingsPage: React.FC = () => {
       // 转换扁平数据为后端期望的嵌套结构
       const backendSettings = {
         basic: {
-          app_name: "AutoClip Desktop",
+          app_name: "Cooper AutoClip 03",
           app_version: "1.0.0",
           debug_mode: false,
           auto_start: true
@@ -214,9 +214,9 @@ const SettingsPage: React.FC = () => {
           log_retention_days: 7
         },
         paths: {
-          data_directory: "/Users/zhoukk/Library/Application Support/AutoClip",
-          cache_directory: "/Users/zhoukk/Library/Application Support/AutoClip/cache",
-          temp_directory: "/Users/zhoukk/Library/Application Support/AutoClip/temp"
+          data_directory: "~/Library/Application Support/Cooper AutoClip 03",
+          cache_directory: "~/Library/Application Support/Cooper AutoClip 03/cache",
+          temp_directory: "~/Library/Application Support/Cooper AutoClip 03/temp"
         }
       }
       

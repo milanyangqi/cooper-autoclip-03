@@ -125,6 +125,9 @@ export interface UploadFilesRequest {
   srt_file?: File
   project_name: string
   video_category?: string
+  target_clip_count?: number
+  min_clip_duration_sec?: number
+  max_clip_duration_sec?: number
 }
 
 export interface VideoCategory {
@@ -167,6 +170,9 @@ export interface BilibiliDownloadRequest {
   project_name: string
   video_category?: string
   browser?: string
+  target_clip_count?: number
+  min_clip_duration_sec?: number
+  max_clip_duration_sec?: number
 }
 
 export interface BilibiliDownloadTask {
@@ -249,6 +255,15 @@ export const projectApi = {
     formData.append('project_name', data.project_name)
     if (data.video_category) {
       formData.append('video_category', data.video_category)
+    }
+    if (data.target_clip_count !== undefined) {
+      formData.append('target_clip_count', String(data.target_clip_count))
+    }
+    if (data.min_clip_duration_sec !== undefined) {
+      formData.append('min_clip_duration_sec', String(data.min_clip_duration_sec))
+    }
+    if (data.max_clip_duration_sec !== undefined) {
+      formData.append('max_clip_duration_sec', String(data.max_clip_duration_sec))
     }
     
     try {

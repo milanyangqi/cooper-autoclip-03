@@ -50,14 +50,10 @@
 
 ## 📞 获取帮助
 
-### 联系方式
-- **个人微信**: your_wechat_id
-- **飞书**: your_feishu_id
-
 ### 问题反馈
-- **Bug报告**: [GitHub Issues](https://github.com/your-username/autoclip/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-username/autoclip/discussions)
-- **代码贡献**: [GitHub Pull Requests](https://github.com/your-username/autoclip/pulls)
+- **Bug报告**: [GitHub Issues](https://github.com/milanyangqi/cooper-autoclip-03/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/milanyangqi/cooper-autoclip-03/discussions)
+- **代码贡献**: [GitHub Pull Requests](https://github.com/milanyangqi/cooper-autoclip-03/pulls)
 
 ## 🎯 项目状态
 
@@ -110,6 +106,6 @@
 
 **如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
 
-Made with ❤️ by AutoClip Team
+Made with ❤️ by Cooper
 
 </div>

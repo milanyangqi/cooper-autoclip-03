@@ -1,4 +1,4 @@
-# 🚀 AutoClip Desktop 用户安装指南
+# 🚀 Cooper AutoClip 03 用户安装指南
 
 ## 📋 系统要求
 
@@ -16,7 +16,7 @@
 
 ### 1. 下载安装包
 
-从 [Releases页面](https://github.com/autoclip/autoclip/releases) 下载对应平台的安装包：
+从 [Releases页面](https://github.com/milanyangqi/cooper-autoclip-03/releases) 下载对应平台的安装包：
 
 - **macOS (Apple Silicon)**: `AutoClip-Desktop-1.0.0-arm64.dmg`
 - **macOS (Intel)**: `AutoClip-Desktop-1.0.0-x64.dmg`
@@ -27,7 +27,7 @@
 
 #### macOS
 1. 双击下载的 `.dmg` 文件
-2. 将 `AutoClip Desktop` 拖拽到 `Applications` 文件夹
+2. 将 `Cooper AutoClip 03` 拖拽到 `Applications` 文件夹
 3. 首次运行时，系统可能提示"无法验证开发者"，请：
    - 打开 `系统偏好设置` > `安全性与隐私`
    - 点击 `仍要打开` 按钮
@@ -159,15 +159,15 @@
 应用会检查更新并提示用户下载新版本。
 
 ### 手动更新
-1. 访问 [Releases页面](https://github.com/autoclip/autoclip/releases)
+1. 访问 [Releases页面](https://github.com/milanyangqi/cooper-autoclip-03/releases)
 2. 下载最新版本的安装包
 3. 按照安装步骤重新安装
 
 ## 📞 技术支持
 
-- **GitHub Issues**: [报告问题](https://github.com/autoclip/autoclip/issues)
-- **文档**: [查看完整文档](https://github.com/autoclip/autoclip/wiki)
-- **社区**: [加入讨论](https://github.com/autoclip/autoclip/discussions)
+- **GitHub Issues**: [报告问题](https://github.com/milanyangqi/cooper-autoclip-03/issues)
+- **文档**: [查看完整文档](https://github.com/milanyangqi/cooper-autoclip-03/wiki)
+- **社区**: [加入讨论](https://github.com/milanyangqi/cooper-autoclip-03/discussions)
 
 ---
 

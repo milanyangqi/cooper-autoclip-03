@@ -23,6 +23,26 @@ class SimplePipelineAdapter:
     def __init__(self, project_id: str, task_id: str):
         self.project_id = project_id
         self.task_id = task_id
+
+    def _get_clip_selection_config(self) -> Dict[str, Any]:
+        """读取项目级片段筛选配置。"""
+        try:
+            from backend.core.database import SessionLocal
+            from backend.models.project import Project
+
+            db = SessionLocal()
+            try:
+                project = db.query(Project).filter(Project.id == self.project_id).first()
+                if not project or not project.processing_config:
+                    return {}
+
+                clip_selection = project.processing_config.get("clip_selection")
+                return clip_selection if isinstance(clip_selection, dict) else {}
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"读取项目片段筛选配置失败，将使用自动模式: {e}")
+            return {}
         
     async def _generate_subtitle_automatically(self, video_path: str, metadata_dir: Path) -> Path:
         """
@@ -153,7 +173,8 @@ class SimplePipelineAdapter:
                 logger.info("执行Step 3: 内容评分")
                 scored_clips = run_step3_scoring(
                     metadata_dir / "step2_timeline.json",
-                    metadata_dir=metadata_dir
+                    metadata_dir=metadata_dir,
+                    selection_config=self._get_clip_selection_config()
                 )
                 emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
             else:
@@ -270,6 +291,7 @@ class SimplePipelineAdapter:
                 "status": "failed",
                 "project_id": self.project_id,
                 "task_id": self.task_id,
+                "message": error_msg,
                 "error": error_msg
             }
 

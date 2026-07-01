@@ -405,8 +405,13 @@ class PipelineAdapter:
             # 获取项目信息以确定视频分类
             project = self.db.query(Project).filter(Project.id == self.project_id).first()
             video_category = "default"
+            selection_config = {}
             if project and project.project_metadata:
                 video_category = project.project_metadata.get("video_category", "default")
+            if project and project.processing_config:
+                clip_selection = project.processing_config.get("clip_selection")
+                if isinstance(clip_selection, dict):
+                    selection_config = clip_selection
             
             # 获取对应的提示词文件
             prompt_files = get_prompt_files(video_category)
@@ -415,7 +420,8 @@ class PipelineAdapter:
                 timeline_path=timeline_path,
                 metadata_dir=self.project_paths["metadata_dir"],
                 output_path=output_path,
-                prompt_files=prompt_files
+                prompt_files=prompt_files,
+                selection_config=selection_config
             )
             
             return {"status": "success", "result": result, "output_path": str(output_path)}

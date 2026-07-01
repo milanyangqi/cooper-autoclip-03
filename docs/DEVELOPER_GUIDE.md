@@ -1,4 +1,4 @@
-# 👨‍💻 AutoClip Desktop 开发者指南
+# 👨‍💻 Cooper AutoClip 03 开发者指南
 
 ## 📋 目录
 
@@ -19,7 +19,7 @@
 ### 整体架构
 
 ```
-AutoClip Desktop
+Cooper AutoClip 03
 ├── Frontend (React + TypeScript + Ant Design)
 ├── Backend (Python + FastAPI + Celery)
 ├── Tauri (Rust + WebView)
@@ -49,8 +49,8 @@ AutoClip Desktop
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/your-org/autoclip-desktop.git
-cd autoclip-desktop
+git clone https://github.com/milanyangqi/cooper-autoclip-03.git
+cd cooper-autoclip-03
 ```
 
 2. **安装前端依赖**
@@ -801,8 +801,8 @@ docker-compose -f docker-compose.test.yml down
 
 1. **Fork项目**
    ```bash
-   git clone https://github.com/your-username/autoclip-desktop.git
-   cd autoclip-desktop
+   git clone https://github.com/milanyangqi/cooper-autoclip-03.git
+   cd cooper-autoclip-03
    ```
 
 2. **创建分支**

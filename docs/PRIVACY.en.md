@@ -141,7 +141,7 @@ When our data practices change, we will update this policy and revise the "Last 
 For any questions, comments, or complaints about this Privacy Policy or our handling of personal information, contact:
 
 - Email: **christine95zhouye@gmail.com**
-- Website: **https://zhouxiaoka.github.io/autoclip_intro/**
+- Website: **https://github.com/milanyangqi/cooper-autoclip-03**
 
 ---
 

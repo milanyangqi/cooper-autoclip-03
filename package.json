@@ -1,4 +1,6 @@
 {
+  "name": "cooper-autoclip-03",
+  "private": true,
   "dependencies": {
     "@tauri-apps/cli": "^2.0.0-rc.18"
   }

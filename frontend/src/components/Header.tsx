@@ -42,7 +42,7 @@ const Header: React.FC = () => {
             letterSpacing: '0.3px',
           }}
         >
-          Auto<em style={{ fontStyle: 'italic' }}>Clip</em>
+          Cooper Auto<em style={{ fontStyle: 'italic' }}>Clip 03</em>
         </span>
       </div>
 

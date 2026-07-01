@@ -134,6 +134,7 @@ local_backups/
 # Redis数据文件
 dump.rdb
 control/
+celerybeat-schedule*
 
 # 临时文件
 *.tmp

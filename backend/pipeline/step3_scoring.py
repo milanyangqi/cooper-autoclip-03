@@ -11,6 +11,7 @@ from collections import defaultdict
 # 导入依赖
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
+from ..utils.clip_selection_config import normalize_clip_selection_config
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,120 @@ class ClipScorer:
             json.dump(scored_clips, f, ensure_ascii=False, indent=2)
         logger.info(f"评分结果已保存到: {output_path}")
 
-def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None) -> List[Dict]:
+    def _duration_seconds(self, clip: Dict) -> Optional[float]:
+        """计算片段时长，无法解析时返回 None。"""
+        try:
+            bounds = self._time_bounds_seconds(clip)
+            if bounds is None:
+                return None
+
+            start_seconds, end_seconds = bounds
+            duration = end_seconds - start_seconds
+            return duration if duration > 0 else None
+        except Exception as e:
+            logger.warning(f"片段 {clip.get('id', '未知')} 时长解析失败: {e}")
+            return None
+
+    def _time_bounds_seconds(self, clip: Dict) -> Optional[tuple[float, float]]:
+        """返回片段起止秒数。"""
+        start_time = clip.get('start_time')
+        end_time = clip.get('end_time')
+        if not start_time or not end_time:
+            return None
+
+        start_seconds = self.text_processor.time_to_seconds(str(start_time))
+        end_seconds = self.text_processor.time_to_seconds(str(end_time))
+        if end_seconds <= start_seconds:
+            return None
+
+        return start_seconds, end_seconds
+
+    @staticmethod
+    def _seconds_to_srt_time(seconds: float) -> str:
+        """将秒数转为 SRT 时间格式。"""
+        total_milliseconds = max(0, int(round(seconds * 1000)))
+        hours, remainder = divmod(total_milliseconds, 3600 * 1000)
+        minutes, remainder = divmod(remainder, 60 * 1000)
+        secs, milliseconds = divmod(remainder, 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+    def select_high_score_clips(
+        self,
+        scored_clips: List[Dict],
+        selection_config: Optional[Dict[str, Any]] = None,
+        min_score_threshold: float = MIN_SCORE_THRESHOLD,
+    ) -> List[Dict]:
+        """按评分、时长和数量筛选最终进入后续步骤的片段。"""
+        try:
+            normalized_config = normalize_clip_selection_config(selection_config)
+        except ValueError as e:
+            logger.warning(f"片段筛选配置无效，已忽略人工控制参数: {e}")
+            normalized_config = {}
+
+        target_count = normalized_config.get("target_clip_count")
+        min_duration = normalized_config.get("min_clip_duration_sec")
+        max_duration = normalized_config.get("max_clip_duration_sec")
+        duration_filter_enabled = min_duration is not None or max_duration is not None
+
+        selected_clips = []
+        for clip in scored_clips:
+            duration = self._duration_seconds(clip)
+            if duration is not None:
+                clip["duration_seconds"] = round(duration, 2)
+
+            if clip.get('final_score', 0) < min_score_threshold:
+                continue
+
+            if duration_filter_enabled and duration is None:
+                continue
+            if min_duration is not None and duration < min_duration:
+                continue
+
+            selected_clip = dict(clip)
+            if max_duration is not None and duration > max_duration:
+                bounds = self._time_bounds_seconds(clip)
+                if bounds is None:
+                    continue
+
+                start_seconds, _ = bounds
+                selected_clip["original_start_time"] = clip.get("start_time")
+                selected_clip["original_end_time"] = clip.get("end_time")
+                selected_clip["original_duration_seconds"] = round(duration, 2)
+                selected_clip["end_time"] = self._seconds_to_srt_time(start_seconds + max_duration)
+                selected_clip["duration_seconds"] = float(max_duration)
+                selected_clip["was_truncated_by_clip_selection"] = True
+
+            selected_clips.append(selected_clip)
+
+        if target_count is not None:
+            selected_clips = sorted(
+                selected_clips,
+                key=lambda x: x.get('final_score', 0),
+                reverse=True
+            )[:target_count]
+
+        selected_clips.sort(key=lambda x: self.text_processor.time_to_seconds(str(x.get('start_time', '00:00:00,000'))))
+
+        logger.info(
+            "片段筛选完成: 原始=%s, 入选=%s, 评分阈值=%.2f, 数量上限=%s, 时长范围=%s-%s秒",
+            len(scored_clips),
+            len(selected_clips),
+            min_score_threshold,
+            target_count or "自动",
+            min_duration or "不限",
+            max_duration or "不限",
+        )
+
+        return selected_clips
+
+def run_step3_scoring(
+    timeline_path: Path,
+    metadata_dir: Path = None,
+    output_path: Optional[Path] = None,
+    prompt_files: Dict = None,
+    selection_config: Optional[Dict[str, Any]] = None,
+    min_score_threshold: float = MIN_SCORE_THRESHOLD,
+) -> List[Dict]:
     """
     运行Step 3: 内容评分与筛选
     
@@ -156,8 +270,12 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
     # 评分
     scored_clips = scorer.score_clips(timeline_data)
     
-    # 筛选高分切片
-    high_score_clips = [clip for clip in scored_clips if clip['final_score'] >= MIN_SCORE_THRESHOLD]
+    # 筛选最终进入后续步骤的切片
+    high_score_clips = scorer.select_high_score_clips(
+        scored_clips,
+        selection_config=selection_config,
+        min_score_threshold=min_score_threshold,
+    )
     
     # 保存结果
     if metadata_dir is None:
@@ -172,5 +290,8 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
         output_path = metadata_dir / "step3_high_score_clips.json"
         
     scorer.save_scores(high_score_clips, output_path)
+
+    if timeline_data and scored_clips and not high_score_clips:
+        raise ValueError("没有符合条件的片段，请放宽时长或数量参数")
     
     return high_score_clips

@@ -131,7 +131,7 @@ const DesktopSettings: React.FC = () => {
     try {
       // 转换扁平结构为后端期望的DesktopConfig结构
       const configData = {
-        app_name: values.app_name || "AutoClip Desktop",
+        app_name: values.app_name || "Cooper AutoClip 03",
         app_version: values.app_version || "1.0.0",
         debug_mode: values.debug_mode || false,
         host: values.host || "127.0.0.1",

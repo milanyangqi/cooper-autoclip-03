@@ -19,6 +19,7 @@ from backend.schemas.project import (
     ProjectType, ProjectStatus
 )
 from backend.schemas.base import PaginationParams
+from backend.utils.clip_selection_config import build_clip_selection_config
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ async def upload_files(
     srt_file: Optional[UploadFile] = File(None),
     project_name: str = Form(...),
     video_category: Optional[str] = Form(None),
+    target_clip_count: Optional[int] = Form(None),
+    min_clip_duration_sec: Optional[int] = Form(None),
+    max_clip_duration_sec: Optional[int] = Form(None),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """Upload video file and optional subtitle file to create a new project. If no subtitle is provided, Whisper will automatically generate one."""
@@ -60,6 +64,20 @@ async def upload_files(
         
         # 创建项目数据
         subtitle_info = srt_file.filename if srt_file else "Whisper自动生成"
+        clip_selection_config = build_clip_selection_config(
+            target_clip_count=target_clip_count,
+            min_clip_duration_sec=min_clip_duration_sec,
+            max_clip_duration_sec=max_clip_duration_sec,
+        )
+
+        settings = {
+            "video_category": video_category or "knowledge",
+            "video_file": video_file.filename,
+            "srt_file": subtitle_info
+        }
+        if clip_selection_config:
+            settings["clip_selection"] = clip_selection_config
+
         project_data = ProjectCreate(
             name=project_name,
             description=f"Video: {video_file.filename}, Subtitle: {subtitle_info}",
@@ -67,11 +85,7 @@ async def upload_files(
             status=ProjectStatus.PENDING,
             source_url=None,
             source_file=video_file.filename,
-            settings={
-                "video_category": video_category or "knowledge",
-                "video_file": video_file.filename,
-                "srt_file": subtitle_info
-            }
+            settings=settings
         )
         
         # 创建项目
@@ -156,11 +170,7 @@ async def upload_files(
             "source_url": project.project_metadata.get("source_url") if project.project_metadata else None,
             "source_file": str(project.video_path) if project.video_path else None,
             "video_path": str(video_path),  # 添加video_path字段
-            "settings": {
-                "video_category": video_category or "knowledge",
-                "video_file": video_file.filename,
-                "srt_file": subtitle_info
-            },  # 只包含可序列化的数据
+            "settings": settings,  # 只包含可序列化的数据
             "created_at": project.created_at,
             "updated_at": project.updated_at,
             "completed_at": project.completed_at,
@@ -176,6 +186,8 @@ async def upload_files(
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("上传文件创建项目失败")
         raise HTTPException(status_code=500, detail="创建项目失败，请稍后重试")

@@ -6,12 +6,13 @@ B站相关API路由
 import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Form, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from ...utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
 from ...core.config import get_data_directory
+from ...utils.clip_selection_config import build_clip_selection_config
 from pathlib import Path
 import uuid
 import asyncio
@@ -32,6 +33,9 @@ class BilibiliDownloadRequest(BaseModel):
     project_name: str
     video_category: Optional[str] = "default"
     browser: Optional[str] = None
+    target_clip_count: Optional[int] = Field(default=None, ge=1)
+    min_clip_duration_sec: Optional[int] = Field(default=None, ge=1)
+    max_clip_duration_sec: Optional[int] = Field(default=None, ge=1)
 
 class BilibiliVideoInfo(BaseModel):
     title: str
@@ -97,6 +101,11 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
     """创建B站视频下载任务 - 立即创建项目"""
     try:
         logger.info(f"创建B站下载任务: {request.url}")
+        clip_selection_config = build_clip_selection_config(
+            target_clip_count=request.target_clip_count,
+            min_clip_duration_sec=request.min_clip_duration_sec,
+            max_clip_duration_sec=request.max_clip_duration_sec,
+        )
         
         # 先获取视频信息以获取缩略图
         from ...utils.bilibili_downloader import BilibiliDownloader
@@ -132,6 +141,22 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
                     logger.error(f"处理B站缩略图失败: {e}")
                     # 缩略图处理失败不影响主流程
             
+            settings = {
+                "download_status": "downloading",
+                "download_progress": 0.0,
+                "bilibili_info": {
+                    "url": request.url,
+                    "browser": request.browser,
+                    "title": video_info.title,
+                    "uploader": video_info.uploader,
+                    "duration": video_info.duration,
+                    "view_count": video_info.view_count,
+                    "thumbnail_url": video_info.thumbnail_url
+                }
+            }
+            if clip_selection_config:
+                settings["clip_selection"] = clip_selection_config
+
             # 创建项目数据
             project_data = ProjectCreate(
                 name=request.project_name,
@@ -140,19 +165,7 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
                 status=ProjectStatus.PENDING,  # 初始状态为等待中
                 source_url=request.url,
                 source_file=None,  # 暂时为空，下载完成后更新
-                settings={
-                    "download_status": "downloading",
-                    "download_progress": 0.0,
-                    "bilibili_info": {
-                        "url": request.url,
-                        "browser": request.browser,
-                        "title": video_info.title,
-                        "uploader": video_info.uploader,
-                        "duration": video_info.duration,
-                        "view_count": video_info.view_count,
-                        "thumbnail_url": video_info.thumbnail_url
-                    }
-                }
+                settings=settings
             )
             
             project = project_service.create_project(project_data)
@@ -212,6 +225,10 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
         finally:
             db.close()
         
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"创建下载任务失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")

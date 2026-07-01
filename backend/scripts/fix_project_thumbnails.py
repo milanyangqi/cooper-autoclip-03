@@ -117,7 +117,7 @@ def fix_clip_thumbnail(project, db):
     """从切片生成缩略图"""
     try:
         # 查找项目目录中的切片文件
-        project_dir = Path(f"/Users/zhoukk/autoclip/data/projects/{project.id}")
+        project_dir = Path(f"data/projects/{project.id}")
         clips_dir = project_dir / "output" / "clips"
         
         if not clips_dir.exists():

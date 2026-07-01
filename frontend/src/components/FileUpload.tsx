@@ -17,6 +17,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [projectName, setProjectName] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [targetClipCount, setTargetClipCount] = useState('')
+  const [minClipDurationSec, setMinClipDurationSec] = useState('')
+  const [maxClipDurationSec, setMaxClipDurationSec] = useState('')
   const [categories, setCategories] = useState<VideoCategory[]>([])
   const [, setLoadingCategories] = useState(false)
   const [files, setFiles] = useState<{
@@ -78,6 +81,40 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     multiple: true
   })
 
+  const parsePositiveInt = (value: string, label: string): number | undefined | null => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+
+    const parsed = Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      message.error(`${label}必须是正整数`)
+      return null
+    }
+
+    return parsed
+  }
+
+  const getClipSelectionPayload = (): Record<string, number> | null => {
+    const targetCount = parsePositiveInt(targetClipCount, '生成片段数量')
+    const minDuration = parsePositiveInt(minClipDurationSec, '最短时长')
+    const maxDuration = parsePositiveInt(maxClipDurationSec, '最长时长')
+
+    if (targetCount === null || minDuration === null || maxDuration === null) {
+      return null
+    }
+
+    if (minDuration !== undefined && maxDuration !== undefined && minDuration > maxDuration) {
+      message.error('最短时长不能大于最长时长')
+      return null
+    }
+
+    const payload: Record<string, number> = {}
+    if (targetCount !== undefined) payload.target_clip_count = targetCount
+    if (minDuration !== undefined) payload.min_clip_duration_sec = minDuration
+    if (maxDuration !== undefined) payload.max_clip_duration_sec = maxDuration
+    return payload
+  }
+
   const handleUpload = async () => {
     if (!files.video) {
       message.error('请选择视频文件')
@@ -92,6 +129,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     // 检查API配置
     const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
     if (!hasValidApiConfig) {
+      return
+    }
+
+    const clipSelectionPayload = getClipSelectionPayload()
+    if (clipSelectionPayload === null) {
       return
     }
 
@@ -116,14 +158,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
         video_file: files.video.name,
         srt_file: files.srt?.name || '(将使用语音识别生成)',
         project_name: projectName.trim(),
-        video_category: selectedCategory
+        video_category: selectedCategory,
+        ...clipSelectionPayload
       })
 
       const newProject = await projectApi.uploadFiles({
         video_file: files.video,
         srt_file: files.srt,
         project_name: projectName.trim(),
-        video_category: selectedCategory
+        video_category: selectedCategory,
+        ...clipSelectionPayload
       })
       
       console.log('上传成功，项目信息:', newProject)
@@ -295,6 +339,78 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
               color: '#ffffff'
             }}
           />
+        </div>
+      )}
+
+      {/* 片段控制 - 只有在选择文件后才显示 */}
+      {files.video && (
+        <div style={{ marginBottom: '16px' }}>
+          <Text strong style={{ color: '#ffffff', fontSize: '14px', marginBottom: '8px', display: 'block' }}>
+            片段控制（可选）
+          </Text>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '10px'
+          }}>
+            <div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>生成数量</Text>
+              <Input
+                type="number"
+                min={1}
+                placeholder="自动"
+                value={targetClipCount}
+                onChange={(e) => setTargetClipCount(e.target.value)}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'var(--ac-line-2)',
+                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  color: '#ffffff'
+                }}
+                disabled={uploading}
+              />
+            </div>
+            <div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最短时长（秒）</Text>
+              <Input
+                type="number"
+                min={1}
+                placeholder="不限"
+                value={minClipDurationSec}
+                onChange={(e) => setMinClipDurationSec(e.target.value)}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'var(--ac-line-2)',
+                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  color: '#ffffff'
+                }}
+                disabled={uploading}
+              />
+            </div>
+            <div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最长时长（秒）</Text>
+              <Input
+                type="number"
+                min={1}
+                placeholder="不限"
+                value={maxClipDurationSec}
+                onChange={(e) => setMaxClipDurationSec(e.target.value)}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'var(--ac-line-2)',
+                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  color: '#ffffff'
+                }}
+                disabled={uploading}
+              />
+            </div>
+          </div>
         </div>
       )}
 

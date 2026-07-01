@@ -1,4 +1,4 @@
-# AutoClip 桌面版发布检查清单
+# Cooper AutoClip 03发布检查清单
 
 ## 📋 发布前检查
 
@@ -138,7 +138,7 @@ ls -la "src-tauri/target/release/bundle/macos/"
 - **版本号**: v1.0.0
 - **发布日期**: 2024-12-XX
 - **构建时间**: YYYY-MM-DD HH:MM:SS
-- **发布者**: AutoClip Team
+- **发布者**: Cooper
 
 ### 主要变更
 - 首次发布桌面版
@@ -159,11 +159,10 @@ ls -la "src-tauri/target/release/bundle/macos/"
 
 ## 📞 联系信息
 
-- **项目主页**: https://github.com/zhouxiaoka/autoclip
-- **问题反馈**: https://github.com/zhouxiaoka/autoclip/issues
-- **邮箱**: christine_zhouye@163.com
+- **项目主页**: https://github.com/milanyangqi/cooper-autoclip-03
+- **问题反馈**: https://github.com/milanyangqi/cooper-autoclip-03/issues
+- **联系**: 通过 GitHub Issues 联系维护者
 
 ## 📄 许可证
 
 本项目采用 MIT 许可证，详见 LICENSE 文件。
-

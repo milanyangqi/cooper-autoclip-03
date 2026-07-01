@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AutoClip Desktop",
+  "productName": "Cooper AutoClip 03",
   "version": "1.2.0",
-  "identifier": "com.autoclip.desktop",
+  "identifier": "com.cooper.autoclip03",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AutoClip Desktop",
+        "title": "Cooper AutoClip 03",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -41,8 +41,8 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "AI视频切片工具桌面版",
-    "longDescription": "AutoClip是一款基于AI的智能视频切片工具，支持自动识别精彩片段并生成合集。",
-    "copyright": "© 2024 AutoClip Team",
+    "longDescription": "Cooper AutoClip 03 是一款基于 AI 的智能视频切片工具，支持自动识别精彩片段并生成合集。",
+    "copyright": "© 2026 Cooper",
       "resources": [],
     "externalBin": [],
     "macOS": {

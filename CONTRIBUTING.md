@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢您对AutoClip项目的关注！我们欢迎所有形式的贡献，包括但不限于：
+感谢您对 Cooper AutoClip 03 项目的关注！我们欢迎所有形式的贡献，包括但不限于：
 
 - 🐛 Bug修复
 - ✨ 新功能开发
@@ -15,11 +15,8 @@
 
 ```bash
 # Fork项目到您的GitHub账户，然后克隆
-git clone https://github.com/your-username/autoclip.git
-cd autoclip
-
-# 添加上游仓库
-git remote add upstream https://github.com/original-username/autoclip.git
+git clone https://github.com/milanyangqi/cooper-autoclip-03.git
+cd cooper-autoclip-03
 ```
 
 ### 2. 设置开发环境
@@ -294,13 +291,13 @@ git push origin feature/your-feature-name
 
 ## 联系方式
 
-- **GitHub Issues**: [项目Issues](https://github.com/your-username/autoclip/issues)
-- **GitHub Discussions**: [项目讨论](https://github.com/your-username/autoclip/discussions)
-- **邮箱**: support@autoclip.com
+- **GitHub Issues**: [项目Issues](https://github.com/milanyangqi/cooper-autoclip-03/issues)
+- **GitHub Discussions**: [项目讨论](https://github.com/milanyangqi/cooper-autoclip-03/discussions)
+- **邮箱**: 请通过 GitHub Issues 联系维护者
 
 ## 致谢
 
-感谢所有为AutoClip项目做出贡献的开发者！您的贡献让这个项目变得更好。
+感谢所有为 Cooper AutoClip 03 项目做出贡献的开发者！您的贡献让这个项目变得更好。
 
 ---
 

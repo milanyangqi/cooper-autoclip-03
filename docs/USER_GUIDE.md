@@ -1,4 +1,4 @@
-# 📚 AutoClip Desktop 用户使用指南
+# 📚 Cooper AutoClip 03 用户使用指南
 
 ## 🎯 快速开始
 
@@ -349,7 +349,7 @@
 
 ### 手动更新
 
-1. 访问 [Releases页面](https://github.com/autoclip/autoclip/releases)
+1. 访问 [Releases页面](https://github.com/milanyangqi/cooper-autoclip-03/releases)
 2. 下载最新版本的安装包
 3. 按照安装步骤重新安装
 
@@ -366,9 +366,9 @@
 
 ## 📞 联系我们
 
-- **官方网站**：https://autoclip.ai
-- **GitHub仓库**：https://github.com/autoclip/autoclip
-- **用户社区**：https://community.autoclip.ai
-- **技术支持**：support@autoclip.ai
+- **官方网站**：https://github.com/milanyangqi/cooper-autoclip-03
+- **GitHub仓库**：https://github.com/milanyangqi/cooper-autoclip-03
+- **用户社区**：https://github.com/milanyangqi/cooper-autoclip-03/discussions
+- **技术支持**：请通过 GitHub Issues 联系维护者
 
-感谢您使用 AutoClip Desktop！🎉
+感谢您使用 Cooper AutoClip 03！🎉
