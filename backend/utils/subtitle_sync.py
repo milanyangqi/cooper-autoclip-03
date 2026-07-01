@@ -5,6 +5,11 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from .text_processor import TextProcessor
 
+DEFAULT_SENTENCE_PAUSE_SECONDS = 1.0
+DEFAULT_CLIP_TAIL_PADDING_SECONDS = 0.5
+SENTENCE_END_PUNCTUATION = ".?!。！？"
+TRAILING_SENTENCE_CLOSERS = "\"'”’)]）】》」』"
+
 
 def seconds_to_srt_time(seconds: float) -> str:
     """将秒数转为 SRT 时间格式。"""
@@ -67,6 +72,89 @@ def collect_overlapping_entries(
 
         selected.append(entry)
         if max_entries is not None and len(selected) >= max_entries:
+            break
+
+    return selected
+
+
+def _entry_text(entry: Dict[str, Any]) -> str:
+    return str(entry.get("text", "")).strip()
+
+
+def _has_sentence_terminal(text: str) -> bool:
+    cleaned = text.strip().rstrip(TRAILING_SENTENCE_CLOSERS).strip()
+    return bool(cleaned) and cleaned[-1] in SENTENCE_END_PUNCTUATION
+
+
+def build_sentence_groups(
+    entries: Iterable[Dict[str, Any]],
+    pause_threshold_seconds: float = DEFAULT_SENTENCE_PAUSE_SECONDS,
+) -> List[Dict[str, Any]]:
+    """将连续 SRT cue 合并为完整句子段。"""
+    ordered_entries = sorted(
+        [entry for entry in entries if float(entry.get("end_seconds", 0)) > float(entry.get("start_seconds", 0))],
+        key=lambda item: float(item["start_seconds"]),
+    )
+    groups: List[Dict[str, Any]] = []
+    current_entries: List[Dict[str, Any]] = []
+    current_texts: List[str] = []
+
+    def flush_group() -> None:
+        if not current_entries:
+            return
+
+        groups.append({
+            "start_seconds": float(current_entries[0]["start_seconds"]),
+            "end_seconds": float(current_entries[-1]["end_seconds"]),
+            "text": " ".join(text for text in current_texts if text).strip(),
+            "entries": list(current_entries),
+            "cue_count": len(current_entries),
+        })
+        current_entries.clear()
+        current_texts.clear()
+
+    for index, entry in enumerate(ordered_entries):
+        start_seconds = float(entry["start_seconds"])
+        end_seconds = float(entry["end_seconds"])
+
+        if current_entries:
+            previous_end = float(current_entries[-1]["end_seconds"])
+            if start_seconds - previous_end >= pause_threshold_seconds:
+                flush_group()
+
+        current_entries.append(entry)
+        current_texts.append(_entry_text(entry))
+
+        next_entry = ordered_entries[index + 1] if index + 1 < len(ordered_entries) else None
+        next_gap = None
+        if next_entry:
+            next_gap = float(next_entry["start_seconds"]) - end_seconds
+
+        if _has_sentence_terminal(" ".join(current_texts)):
+            flush_group()
+        elif next_gap is not None and next_gap >= pause_threshold_seconds:
+            flush_group()
+
+    flush_group()
+    return groups
+
+
+def collect_overlapping_sentence_groups(
+    groups: Iterable[Dict[str, Any]],
+    start_seconds: float,
+    end_seconds: float,
+    max_groups: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """收集与时间窗重叠的完整句子段。"""
+    selected = []
+    for group in groups:
+        group_start = float(group["start_seconds"])
+        group_end = float(group["end_seconds"])
+        if group_end <= start_seconds or group_start >= end_seconds:
+            continue
+
+        selected.append(group)
+        if max_groups is not None and len(selected) >= max_groups:
             break
 
     return selected

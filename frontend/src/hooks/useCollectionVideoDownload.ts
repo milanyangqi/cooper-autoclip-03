@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { message } from 'antd'
 import { projectApi } from '../services/api'
 
+const DOWNLOAD_CHAIN_DELAY_MS = 800
+const waitForNextDownload = () => new Promise((resolve) => window.setTimeout(resolve, DOWNLOAD_CHAIN_DELAY_MS))
+const getDownloadErrorMessage = (error: any, fallback: string) => error?.userMessage || fallback
+
 export const useCollectionVideoDownload = () => {
   const [isGenerating, setIsGenerating] = useState(false)
 
@@ -32,13 +36,14 @@ export const useCollectionVideoDownload = () => {
       message.success('合集视频下载完成')
 
       if (asset === 'both') {
+        await waitForNextDownload()
         await projectApi.downloadVideo(projectId, undefined, collectionId, 'subtitle')
         message.success('合集字幕下载完成')
       }
       
     } catch (error) {
       console.error('生成合集视频失败:', error)
-      message.error(asset === 'subtitle' ? '合集字幕下载失败' : '合集视频下载失败')
+      message.error(getDownloadErrorMessage(error, asset === 'subtitle' ? '合集字幕下载失败' : '合集视频下载失败'))
     } finally {
       setIsGenerating(false)
     }

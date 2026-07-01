@@ -12,7 +12,13 @@ from collections import defaultdict
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..utils.clip_selection_config import normalize_clip_selection_config
-from ..utils.subtitle_sync import collect_overlapping_entries, find_project_input_srt, load_srt_entries
+from ..utils.subtitle_sync import (
+    DEFAULT_CLIP_TAIL_PADDING_SECONDS,
+    build_sentence_groups,
+    collect_overlapping_sentence_groups,
+    find_project_input_srt,
+    load_srt_entries,
+)
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
 
 logger = logging.getLogger(__name__)
@@ -196,6 +202,7 @@ class ClipScorer:
         duration_filter_enabled = min_duration is not None or max_duration is not None
         sentence_control_enabled = min_sentence_count is not None or max_sentence_count is not None
         subtitle_entries = subtitle_entries or []
+        sentence_groups = build_sentence_groups(subtitle_entries) if sentence_control_enabled else []
 
         selected_clips = []
         for clip in scored_clips:
@@ -232,7 +239,9 @@ class ClipScorer:
 
             if sentence_control_enabled:
                 selected_clip["sentence_range_applied"] = False
+                selected_clip["sentence_group_applied"] = False
                 selected_clip["sentence_count"] = 0
+                selected_clip["tail_padding_seconds"] = DEFAULT_CLIP_TAIL_PADDING_SECONDS
                 if subtitle_source_path:
                     selected_clip["subtitle_source_path"] = str(subtitle_source_path)
                 if min_sentence_count is not None:
@@ -241,29 +250,67 @@ class ClipScorer:
                     selected_clip["max_clip_sentence_count"] = max_sentence_count
 
                 if (
-                    subtitle_entries
+                    sentence_groups
                     and final_start_seconds is not None
                     and final_end_seconds is not None
                     and final_end_seconds > final_start_seconds
                 ):
-                    matched_entries = collect_overlapping_entries(
-                        subtitle_entries,
+                    matched_groups = collect_overlapping_sentence_groups(
+                        sentence_groups,
                         final_start_seconds,
                         final_end_seconds,
-                        max_entries=max_sentence_count,
+                        max_groups=max_sentence_count,
                     )
-                    selected_clip["sentence_count"] = len(matched_entries)
+                    selected_clip["sentence_count"] = len(matched_groups)
                     selected_clip["sentence_range_applied"] = True
+                    selected_clip["sentence_group_applied"] = True
+                    selected_clip["sentence_cue_count"] = sum(int(group.get("cue_count", 0)) for group in matched_groups)
                     selected_clip["sentence_count_below_min"] = (
-                        min_sentence_count is not None and len(matched_entries) < min_sentence_count
+                        min_sentence_count is not None and len(matched_groups) < min_sentence_count
                     )
 
-                    if matched_entries and max_sentence_count is not None:
-                        adjusted_end_seconds = min(final_end_seconds, float(matched_entries[-1]["end_seconds"]))
-                        if adjusted_end_seconds > final_start_seconds:
-                            final_end_seconds = adjusted_end_seconds
+                    if matched_groups:
+                        original_start_time = selected_clip.get("start_time")
+                        original_end_time = selected_clip.get("end_time")
+                        sentence_start_seconds = float(matched_groups[0]["start_seconds"])
+                        sentence_end_seconds = float(matched_groups[-1]["end_seconds"])
+                        max_end_by_duration = (
+                            sentence_start_seconds + max_duration
+                            if max_duration is not None else None
+                        )
+                        hard_end_limit = final_end_seconds
+                        if max_end_by_duration is not None:
+                            hard_end_limit = min(hard_end_limit, max_end_by_duration)
+
+                        sentence_limited_end_seconds = min(sentence_end_seconds, hard_end_limit)
+                        if sentence_end_seconds > hard_end_limit:
+                            selected_clip["sentence_boundary_truncated_by_limit"] = True
+
+                        padded_end_seconds = min(
+                            sentence_limited_end_seconds + DEFAULT_CLIP_TAIL_PADDING_SECONDS,
+                            hard_end_limit,
+                        )
+
+                        if padded_end_seconds > sentence_start_seconds:
+                            if (
+                                abs(sentence_start_seconds - final_start_seconds) > 0.001
+                                or abs(padded_end_seconds - final_end_seconds) > 0.001
+                            ):
+                                selected_clip.setdefault("original_start_time", original_start_time)
+                                selected_clip.setdefault("original_end_time", original_end_time)
+                                selected_clip.setdefault("original_duration_seconds", round(duration, 2) if duration else None)
+
+                            final_start_seconds = sentence_start_seconds
+                            final_end_seconds = padded_end_seconds
+                            selected_clip["start_time"] = self._seconds_to_srt_time(final_start_seconds)
                             selected_clip["end_time"] = self._seconds_to_srt_time(final_end_seconds)
+                            selected_clip["sentence_limited_end_time"] = self._seconds_to_srt_time(sentence_limited_end_seconds)
+                            selected_clip["tail_padding_applied_seconds"] = round(
+                                max(0.0, final_end_seconds - sentence_limited_end_seconds),
+                                3,
+                            )
                             selected_clip["duration_seconds"] = round(final_end_seconds - final_start_seconds, 2)
+                            selected_clip["was_adjusted_to_sentence_boundary"] = True
 
             selected_clips.append(selected_clip)
 

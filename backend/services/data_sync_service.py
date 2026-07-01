@@ -230,8 +230,18 @@ class DataSyncService:
                         # 始终使用项目内路径
                         video_path = str(project_video_path)
                         logger.info(f"更新切片 {existing_clip.id} 的video_path: {video_path}")
+                        start_time = self._convert_time_to_seconds(clip_data.get('start_time', '00:00:00'))
+                        end_time = self._convert_time_to_seconds(clip_data.get('end_time', '00:00:00'))
+                        duration = max(0, end_time - start_time)
+                        existing_clip.title = clip_data.get('generated_title', clip_data.get('title', clip_data.get('outline', existing_clip.title)))
+                        existing_clip.description = clip_data.get('recommend_reason', existing_clip.description or '')
+                        existing_clip.start_time = start_time
+                        existing_clip.end_time = end_time
+                        existing_clip.duration = duration
+                        existing_clip.score = clip_data.get('final_score', existing_clip.score or 0.0)
                         existing_clip.video_path = video_path
                         existing_clip.clip_metadata = clip_data
+                        existing_clip.status = ClipStatus.COMPLETED
                         if existing_clip.tags is None:
                             existing_clip.tags = []  # 确保tags是空列表而不是null
                         active_clip_ids.add(existing_clip.id)

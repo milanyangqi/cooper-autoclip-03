@@ -54,6 +54,27 @@ const isTauriRuntime = () => (
   ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
 )
 
+const extractDownloadErrorMessage = async (error: any): Promise<string> => {
+  const data = error?.response?.data
+  if (data instanceof Blob) {
+    const text = await data.text()
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        return parsed?.detail || parsed?.message || text
+      } catch {
+        return text
+      }
+    }
+  }
+
+  return error?.userMessage ||
+    error?.response?.data?.detail ||
+    error?.response?.data?.message ||
+    error?.message ||
+    '下载失败'
+}
+
 // 请求拦截器
 api.interceptors.request.use(
   async (config) => {
@@ -498,7 +519,9 @@ export const projectApi = {
       const response = await axios.get(`/api/v1${url}`, { 
         responseType: 'blob',
         headers: {
-          'Accept': 'application/octet-stream'
+          'Accept': asset === 'subtitle'
+            ? 'application/x-subrip,text/plain,*/*'
+            : 'video/mp4,application/octet-stream,*/*'
         }
       })
       
@@ -536,7 +559,9 @@ export const projectApi = {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(downloadUrl)
+      }, 60000)
 
       trackClipsExported({
         clipCount: 1,
@@ -545,10 +570,12 @@ export const projectApi = {
       })
       return response.data
     } catch (error: any) {
+      const userMessage = await extractDownloadErrorMessage(error)
+      error.userMessage = userMessage
       console.error('下载失败:', error)
       trackProcessingFailed({
         stage: 'export',
-        message: error?.message,
+        message: userMessage,
         code: error?.response?.status,
       })
       throw error

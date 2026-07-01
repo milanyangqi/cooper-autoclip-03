@@ -115,7 +115,13 @@ class VideoGenerator:
             try:
                 start_seconds = self.text_processor.time_to_seconds(str(clip["start_time"]))
                 end_seconds = self.text_processor.time_to_seconds(str(clip["end_time"]))
-                matched_entries = collect_overlapping_entries(subtitle_entries, start_seconds, end_seconds)
+                subtitle_end_seconds = end_seconds
+                if clip.get("sentence_limited_end_time"):
+                    subtitle_end_seconds = min(
+                        subtitle_end_seconds,
+                        self.text_processor.time_to_seconds(str(clip["sentence_limited_end_time"])),
+                    )
+                matched_entries = collect_overlapping_entries(subtitle_entries, start_seconds, subtitle_end_seconds)
                 subtitle_path = self._clip_subtitle_output_path(clip)
                 subtitle_count = write_clipped_srt(matched_entries, subtitle_path, start_seconds, end_seconds)
                 clip["subtitle_path"] = str(subtitle_path)

@@ -1340,13 +1340,14 @@ async def download_project_file(
             if not file_path.exists():
                 raise HTTPException(status_code=404, detail="文件不存在")
 
-            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+            encoded_filename = urllib.parse.quote(filename, safe="")
             return FileResponse(
                 path=str(file_path),
                 filename=filename,
                 media_type=media_type,
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "Access-Control-Expose-Headers": "Content-Disposition, Content-Length",
                 }
             )
 

@@ -31,6 +31,9 @@ import { ProjectTaskManager } from '../components/ProjectTaskManager'
 
 const { Content } = Layout
 const { Title, Text } = Typography
+const DOWNLOAD_CHAIN_DELAY_MS = 800
+const waitForNextDownload = () => new Promise((resolve) => window.setTimeout(resolve, DOWNLOAD_CHAIN_DELAY_MS))
+const getDownloadErrorMessage = (error: any, fallback: string) => error?.userMessage || fallback
 
 const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -56,19 +59,23 @@ const ProjectDetailPage: React.FC = () => {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
 
-  const handleProjectDownload = async (asset: 'video' | 'subtitle') => {
-    if (!currentProject) return
+  const handleProjectDownload = async (asset: 'video' | 'subtitle'): Promise<boolean> => {
+    if (!currentProject) return false
     try {
       await projectApi.downloadVideo(currentProject.id, undefined, undefined, asset)
       message.success(asset === 'subtitle' ? '原片字幕下载完成' : '原片视频下载完成')
+      return true
     } catch (error) {
       console.error('下载原片资源失败:', error)
-      message.error(asset === 'subtitle' ? '原片字幕下载失败' : '原片视频下载失败')
+      message.error(getDownloadErrorMessage(error, asset === 'subtitle' ? '原片字幕下载失败' : '原片视频下载失败'))
+      return false
     }
   }
 
   const handleProjectDownloadBoth = async () => {
-    await handleProjectDownload('video')
+    const videoDownloaded = await handleProjectDownload('video')
+    if (!videoDownloaded) return
+    await waitForNextDownload()
     await handleProjectDownload('subtitle')
   }
 

@@ -8,6 +8,10 @@ import BilibiliManager from './BilibiliManager'
 import EditableTitle from './EditableTitle'
 import './ClipCard.css'
 
+const DOWNLOAD_CHAIN_DELAY_MS = 800
+const waitForNextDownload = () => new Promise((resolve) => window.setTimeout(resolve, DOWNLOAD_CHAIN_DELAY_MS))
+const getDownloadErrorMessage = (error: any, fallback: string) => error?.userMessage || fallback
+
 interface ClipCardProps {
   clip: Clip
   videoUrl?: string
@@ -58,18 +62,22 @@ const ClipCard: React.FC<ClipCardProps> = ({
     video.src = videoUrl
   }
 
-  const handleDownloadWithTitle = async (asset: 'video' | 'subtitle' = 'video') => {
+  const handleDownloadWithTitle = async (asset: 'video' | 'subtitle' = 'video'): Promise<boolean> => {
     try {
       // 直接调用API下载方法，它会处理文件名
       await onDownload(clip.id, asset)
+      return true
     } catch (error) {
       console.error('下载失败:', error)
-      message.error('下载失败')
+      message.error(getDownloadErrorMessage(error, asset === 'subtitle' ? '字幕下载失败' : '视频下载失败'))
+      return false
     }
   }
 
   const handleDownloadBoth = async () => {
-    await handleDownloadWithTitle('video')
+    const videoDownloaded = await handleDownloadWithTitle('video')
+    if (!videoDownloaded) return
+    await waitForNextDownload()
     await handleDownloadWithTitle('subtitle')
   }
 
