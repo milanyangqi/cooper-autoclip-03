@@ -221,6 +221,7 @@ class DataSyncService:
                         video_path = str(project_video_path)
                         logger.info(f"更新切片 {existing_clip.id} 的video_path: {video_path}")
                         existing_clip.video_path = video_path
+                        existing_clip.clip_metadata = clip_data
                         if existing_clip.tags is None:
                             existing_clip.tags = []  # 确保tags是空列表而不是null
                         updated_count += 1
@@ -453,7 +454,9 @@ class DataSyncService:
                                 'clip_ids': uuid_clip_ids,  # 使用UUID格式的clip_ids
                                 'original_clip_ids': original_clip_ids,  # 保留原始数字ID
                                 'collection_type': 'ai_recommended',
-                                'original_id': collection_id
+                                'original_id': collection_id,
+                                'subtitle_path': collection_data.get('subtitle_path'),
+                                'subtitle_count': collection_data.get('subtitle_count')
                             },
                             status=CollectionStatus.COMPLETED
                         )
@@ -469,7 +472,9 @@ class DataSyncService:
                             'clip_ids': uuid_clip_ids,
                             'original_clip_ids': original_clip_ids,
                             'collection_type': 'ai_recommended',
-                            'original_id': collection_id
+                            'original_id': collection_id,
+                            'subtitle_path': collection_data.get('subtitle_path'),
+                            'subtitle_count': collection_data.get('subtitle_count')
                         })
                         collection.video_path = video_path
                         collection.export_path = video_path  # 设置export_path

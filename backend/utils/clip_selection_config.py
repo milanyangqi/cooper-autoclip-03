@@ -29,6 +29,8 @@ def build_clip_selection_config(
     target_clip_count: Any = None,
     min_clip_duration_sec: Any = None,
     max_clip_duration_sec: Any = None,
+    min_clip_sentence_count: Any = None,
+    max_clip_sentence_count: Any = None,
 ) -> Dict[str, int]:
     """构建并校验片段筛选配置。空值表示沿用自动模式。"""
     config: Dict[str, int] = {}
@@ -36,9 +38,13 @@ def build_clip_selection_config(
     target_count = _positive_int(target_clip_count, "生成片段数量")
     min_duration = _positive_int(min_clip_duration_sec, "最短时长")
     max_duration = _positive_int(max_clip_duration_sec, "最长时长")
+    min_sentence_count = _positive_int(min_clip_sentence_count, "最少句数")
+    max_sentence_count = _positive_int(max_clip_sentence_count, "最多句数")
 
     if min_duration is not None and max_duration is not None and min_duration > max_duration:
         raise ValueError("最短时长不能大于最长时长")
+    if min_sentence_count is not None and max_sentence_count is not None and min_sentence_count > max_sentence_count:
+        raise ValueError("最少句数不能大于最多句数")
 
     if target_count is not None:
         config["target_clip_count"] = target_count
@@ -46,6 +52,10 @@ def build_clip_selection_config(
         config["min_clip_duration_sec"] = min_duration
     if max_duration is not None:
         config["max_clip_duration_sec"] = max_duration
+    if min_sentence_count is not None:
+        config["min_clip_sentence_count"] = min_sentence_count
+    if max_sentence_count is not None:
+        config["max_clip_sentence_count"] = max_sentence_count
 
     return config
 
@@ -64,4 +74,6 @@ def normalize_clip_selection_config(raw_config: Optional[Mapping[str, Any]]) -> 
         target_clip_count=_first_present(source, "target_clip_count", "clip_count", "max_clips"),
         min_clip_duration_sec=_first_present(source, "min_clip_duration_sec", "min_clip_duration"),
         max_clip_duration_sec=_first_present(source, "max_clip_duration_sec", "max_clip_duration"),
+        min_clip_sentence_count=_first_present(source, "min_clip_sentence_count", "min_sentence_count"),
+        max_clip_sentence_count=_first_present(source, "max_clip_sentence_count", "max_sentence_count"),
     )

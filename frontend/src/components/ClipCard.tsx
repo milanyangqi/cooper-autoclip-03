@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Button, Tooltip, Modal, message } from 'antd'
+import { Card, Button, Tooltip, Modal, message, Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
 import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
@@ -10,7 +11,7 @@ import './ClipCard.css'
 interface ClipCardProps {
   clip: Clip
   videoUrl?: string
-  onDownload: (clipId: string) => void
+  onDownload: (clipId: string, asset?: 'video' | 'subtitle') => void | Promise<unknown>
   projectId?: string
   onClipUpdate?: (clipId: string, updates: Partial<Clip>) => void
 }
@@ -57,13 +58,34 @@ const ClipCard: React.FC<ClipCardProps> = ({
     video.src = videoUrl
   }
 
-  const handleDownloadWithTitle = async () => {
+  const handleDownloadWithTitle = async (asset: 'video' | 'subtitle' = 'video') => {
     try {
       // 直接调用API下载方法，它会处理文件名
-      await onDownload(clip.id)
+      await onDownload(clip.id, asset)
     } catch (error) {
       console.error('下载失败:', error)
       message.error('下载失败')
+    }
+  }
+
+  const handleDownloadBoth = async () => {
+    await handleDownloadWithTitle('video')
+    await handleDownloadWithTitle('subtitle')
+  }
+
+  const downloadMenuItems: MenuProps['items'] = [
+    { key: 'video', label: '下载视频' },
+    { key: 'subtitle', label: '下载字幕' },
+    { key: 'both', label: '下载视频+字幕' },
+  ]
+
+  const handleDownloadMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'subtitle') {
+      handleDownloadWithTitle('subtitle')
+    } else if (key === 'both') {
+      handleDownloadBoth()
+    } else {
+      handleDownloadWithTitle('video')
     }
   }
 
@@ -364,23 +386,24 @@ const ClipCard: React.FC<ClipCardProps> = ({
               >
                 播放
               </Button>
-              <Button
-                type="text"
-                size="small"
-                icon={<DownloadOutlined />}
-                onClick={handleDownloadWithTitle}
-                style={{
-                  color: 'var(--ac-sub)',
-                  border: '1px solid var(--ac-line)',
-                  borderRadius: '999px',
-                  fontSize: '12px',
-                  height: '28px',
-                  padding: '0 14px',
-                  background: 'transparent'
-                }}
-              >
-                下载
-              </Button>
+              <Dropdown menu={{ items: downloadMenuItems, onClick: handleDownloadMenuClick }} trigger={['click']}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DownloadOutlined />}
+                  style={{
+                    color: 'var(--ac-sub)',
+                    border: '1px solid var(--ac-line)',
+                    borderRadius: '999px',
+                    fontSize: '12px',
+                    height: '28px',
+                    padding: '0 14px',
+                    background: 'transparent'
+                  }}
+                >
+                  下载
+                </Button>
+              </Dropdown>
               <Button
                 type="text"
                 size="small"
@@ -407,9 +430,11 @@ const ClipCard: React.FC<ClipCardProps> = ({
         open={showPlayer}
         onCancel={handleClosePlayer}
         footer={[
-          <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={handleDownloadWithTitle}>
-            下载视频
-          </Button>,
+          <Dropdown key="download" menu={{ items: downloadMenuItems, onClick: handleDownloadMenuClick }} trigger={['click']}>
+            <Button type="primary" icon={<DownloadOutlined />}>
+              下载
+            </Button>
+          </Dropdown>,
           <Button 
             key="upload" 
             type="default" 

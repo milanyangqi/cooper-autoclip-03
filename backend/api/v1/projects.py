@@ -50,6 +50,8 @@ async def upload_files(
     target_clip_count: Optional[int] = Form(None),
     min_clip_duration_sec: Optional[int] = Form(None),
     max_clip_duration_sec: Optional[int] = Form(None),
+    min_clip_sentence_count: Optional[int] = Form(None),
+    max_clip_sentence_count: Optional[int] = Form(None),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """Upload video file and optional subtitle file to create a new project. If no subtitle is provided, Whisper will automatically generate one."""
@@ -68,6 +70,8 @@ async def upload_files(
             target_clip_count=target_clip_count,
             min_clip_duration_sec=min_clip_duration_sec,
             max_clip_duration_sec=max_clip_duration_sec,
+            min_clip_sentence_count=min_clip_sentence_count,
+            max_clip_sentence_count=max_clip_sentence_count,
         )
 
         settings = {
@@ -1226,16 +1230,16 @@ async def generate_collection_video(
             collections_dir=str(collections_dir)
         )
         success = video_processor.create_collection(clip_video_paths, output_path)
-        
+
         if not success:
             raise HTTPException(status_code=500, detail="合集视频生成失败")
-        
+
         # 生成合集封面
         thumbnail_path = None
         try:
             thumbnail_filename = f"{collection_id}_{safe_name}_thumbnail.jpg"
             thumbnail_path = collections_dir / thumbnail_filename
-            
+
             # 从视频中提取封面（第5秒的帧）
             thumbnail_success = video_processor.extract_thumbnail(output_path, thumbnail_path, time_offset=5)
             if thumbnail_success:
@@ -1245,19 +1249,61 @@ async def generate_collection_video(
                 logger.warning(f"合集封面生成失败: {collection_id}")
         except Exception as e:
             logger.error(f"生成合集封面时出错: {e}")
-        
+
         # 更新合集的export_path
         collection.export_path = str(output_path)
+
+        # 同步生成合集字幕，按当前合集顺序拼接每个切片字幕。
+        subtitle_path = None
+        subtitle_count = 0
+        try:
+            from ...utils.subtitle_sync import concatenate_srt_files
+
+            subtitles_dir = project_dir / "output" / "subtitles" / "collections"
+            subtitles_dir.mkdir(parents=True, exist_ok=True)
+            subtitle_path = subtitles_dir / f"{collection_id}_{safe_name}.srt"
+            clip_subtitles = []
+            for clip in ordered_clips:
+                clip_metadata = clip.clip_metadata or {}
+                clip_subtitle_path = clip_metadata.get("subtitle_path")
+                if not clip_subtitle_path and clip.video_path:
+                    fallback = Path(clip.video_path).parent.parent / "subtitles" / "clips" / f"{Path(clip.video_path).stem}.srt"
+                    clip_subtitle_path = str(fallback) if fallback.exists() else None
+
+                if clip_subtitle_path and Path(clip_subtitle_path).exists():
+                    clip_subtitles.append({
+                        "subtitle_path": clip_subtitle_path,
+                        "duration_seconds": clip.duration or max(0, int(clip.end_time or 0) - int(clip.start_time or 0)),
+                    })
+
+            if clip_subtitles:
+                subtitle_count = concatenate_srt_files(clip_subtitles, subtitle_path)
+                if subtitle_count > 0:
+                    collection_metadata = dict(collection.collection_metadata or {})
+                    collection_metadata.update({
+                        "subtitle_path": str(subtitle_path),
+                        "subtitle_count": subtitle_count,
+                    })
+                    collection.collection_metadata = collection_metadata
+                    logger.info(f"合集字幕生成成功: {subtitle_path}")
+                else:
+                    subtitle_path.unlink(missing_ok=True)
+                    subtitle_path = None
+        except Exception as e:
+            logger.warning(f"合集字幕生成失败: {e}")
+
         db.commit()
-        
+
         return {
             "success": True,
             "message": "合集视频生成成功",
             "collection_id": collection_id,
             "output_path": str(output_path),
-            "filename": output_filename
+            "filename": output_filename,
+            "subtitle_path": str(subtitle_path) if subtitle_path else None,
+            "subtitle_count": subtitle_count
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1270,6 +1316,7 @@ async def download_project_file(
     project_id: str,
     clip_id: Optional[str] = Query(None, description="下载指定切片"),
     collection_id: Optional[str] = Query(None, description="下载指定合集"),
+    asset: str = Query("video", description="下载资源类型: video 或 subtitle"),
     db: Session = Depends(get_db),
     project_service: ProjectService = Depends(get_project_service)
 ):
@@ -1282,76 +1329,123 @@ async def download_project_file(
         project = project_service.get(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="项目不存在")
-        
+
+        if asset not in {"video", "subtitle"}:
+            raise HTTPException(status_code=400, detail="不支持的下载类型，请使用 video 或 subtitle")
+
+        from ...utils.video_processor import VideoProcessor
+        import urllib.parse
+
+        def make_file_response(file_path: Path, filename: str, media_type: str):
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="文件不存在")
+
+            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+            return FileResponse(
+                path=str(file_path),
+                filename=filename,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+                }
+            )
+
+        def find_clip_subtitle(clip) -> Optional[Path]:
+            metadata = clip.clip_metadata or {}
+            subtitle_path = metadata.get("subtitle_path")
+            if subtitle_path and Path(subtitle_path).exists():
+                return Path(subtitle_path)
+
+            if clip.video_path:
+                fallback = Path(clip.video_path).parent.parent / "subtitles" / "clips" / f"{Path(clip.video_path).stem}.srt"
+                if fallback.exists():
+                    return fallback
+            return None
+
+        def find_collection_subtitle(collection) -> Optional[Path]:
+            metadata = collection.collection_metadata or {}
+            subtitle_path = metadata.get("subtitle_path")
+            if subtitle_path and Path(subtitle_path).exists():
+                return Path(subtitle_path)
+
+            original_id = metadata.get("original_id")
+            if collection.export_path and original_id:
+                subtitles_dir = Path(collection.export_path).parent.parent / "subtitles" / "collections"
+                matches = list(subtitles_dir.glob(f"{original_id}_*.srt"))
+                if matches:
+                    return matches[0]
+            return None
+
+        def find_project_subtitle() -> Optional[Path]:
+            if project.processing_config and project.processing_config.get("subtitle_path"):
+                subtitle_path = Path(project.processing_config["subtitle_path"])
+                if subtitle_path.exists():
+                    return subtitle_path
+
+            if project.video_path:
+                fallback = Path(project.video_path).parent / "input.srt"
+                if fallback.exists():
+                    return fallback
+            return None
+
         if collection_id:
-            # 下载合集视频
+            # 下载合集视频或字幕
             from ...models.collection import Collection
-            collection = db.query(Collection).filter(Collection.id == collection_id).first()
+            collection = db.query(Collection).filter(
+                Collection.id == collection_id,
+                Collection.project_id == project_id,
+            ).first()
             if not collection:
                 raise HTTPException(status_code=404, detail="合集不存在")
-            
+
+            collection_name = collection.name or f"collection_{collection_id}"
+            safe_name = VideoProcessor.sanitize_filename(collection_name)
+
+            if asset == "subtitle":
+                subtitle_path = find_collection_subtitle(collection)
+                if not subtitle_path:
+                    raise HTTPException(status_code=404, detail="合集字幕文件不存在")
+                return make_file_response(subtitle_path, f"{safe_name}.srt", "application/x-subrip")
+
             if not collection.export_path:
                 raise HTTPException(status_code=404, detail="合集视频文件不存在")
-            
-            file_path = Path(collection.export_path)
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail="合集视频文件不存在")
-            
-            # 生成下载文件名
-            collection_name = collection.name or f"collection_{collection_id}"
-            from ...utils.video_processor import VideoProcessor
-            safe_name = VideoProcessor.sanitize_filename(collection_name)
-            filename = f"{safe_name}.mp4"
-            
-            # 对文件名进行URL编码
-            import urllib.parse
-            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
-            
-            return FileResponse(
-                path=str(file_path),
-                filename=filename,
-                media_type="video/mp4",
-                headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
-                }
-            )
-        
+            return make_file_response(Path(collection.export_path), f"{safe_name}.mp4", "video/mp4")
+
         elif clip_id:
-            # 下载切片视频
+            # 下载切片视频或字幕
             from ...models.clip import Clip
-            clip = db.query(Clip).filter(Clip.id == clip_id).first()
+            clip = db.query(Clip).filter(
+                Clip.id == clip_id,
+                Clip.project_id == project_id,
+            ).first()
             if not clip:
                 raise HTTPException(status_code=404, detail="切片不存在")
-            
+
+            clip_title = clip.title or f"clip_{clip_id}"
+            safe_name = VideoProcessor.sanitize_filename(clip_title)
+
+            if asset == "subtitle":
+                subtitle_path = find_clip_subtitle(clip)
+                if not subtitle_path:
+                    raise HTTPException(status_code=404, detail="切片字幕文件不存在")
+                return make_file_response(subtitle_path, f"{safe_name}.srt", "application/x-subrip")
+
             if not clip.video_path:
                 raise HTTPException(status_code=404, detail="切片视频文件不存在")
-            
-            file_path = Path(clip.video_path)
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail="切片视频文件不存在")
-            
-            # 生成下载文件名
-            clip_title = clip.title or f"clip_{clip_id}"
-            from ...utils.video_processor import VideoProcessor
-            safe_name = VideoProcessor.sanitize_filename(clip_title)
-            filename = f"{safe_name}.mp4"
-            
-            # 对文件名进行URL编码
-            import urllib.parse
-            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
-            
-            return FileResponse(
-                path=str(file_path),
-                filename=filename,
-                media_type="video/mp4",
-                headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
-                }
-            )
-        
-        else:
-            raise HTTPException(status_code=400, detail="必须指定clip_id或collection_id")
-        
+            return make_file_response(Path(clip.video_path), f"{safe_name}.mp4", "video/mp4")
+
+        # 未指定 clip_id / collection_id 时，下载原片视频或原片字幕
+        safe_project_name = VideoProcessor.sanitize_filename(project.name or f"project_{project_id}")
+        if asset == "subtitle":
+            subtitle_path = find_project_subtitle()
+            if not subtitle_path:
+                raise HTTPException(status_code=404, detail="原片字幕文件不存在")
+            return make_file_response(subtitle_path, f"{safe_project_name}.srt", "application/x-subrip")
+
+        if not project.video_path:
+            raise HTTPException(status_code=404, detail="原片视频文件不存在")
+        return make_file_response(Path(project.video_path), f"{safe_project_name}.mp4", "video/mp4")
+
     except HTTPException:
         raise
     except Exception as e:

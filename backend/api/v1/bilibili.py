@@ -36,6 +36,8 @@ class BilibiliDownloadRequest(BaseModel):
     target_clip_count: Optional[int] = Field(default=None, ge=1)
     min_clip_duration_sec: Optional[int] = Field(default=None, ge=1)
     max_clip_duration_sec: Optional[int] = Field(default=None, ge=1)
+    min_clip_sentence_count: Optional[int] = Field(default=None, ge=1)
+    max_clip_sentence_count: Optional[int] = Field(default=None, ge=1)
 
 class BilibiliVideoInfo(BaseModel):
     title: str
@@ -105,6 +107,8 @@ async def create_bilibili_download_task(request: BilibiliDownloadRequest):
             target_clip_count=request.target_clip_count,
             min_clip_duration_sec=request.min_clip_duration_sec,
             max_clip_duration_sec=request.max_clip_duration_sec,
+            min_clip_sentence_count=request.min_clip_sentence_count,
+            max_clip_sentence_count=request.max_clip_sentence_count,
         )
         
         # 先获取视频信息以获取缩略图

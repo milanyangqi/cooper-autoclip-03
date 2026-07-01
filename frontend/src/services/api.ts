@@ -128,6 +128,8 @@ export interface UploadFilesRequest {
   target_clip_count?: number
   min_clip_duration_sec?: number
   max_clip_duration_sec?: number
+  min_clip_sentence_count?: number
+  max_clip_sentence_count?: number
 }
 
 export interface VideoCategory {
@@ -173,6 +175,8 @@ export interface BilibiliDownloadRequest {
   target_clip_count?: number
   min_clip_duration_sec?: number
   max_clip_duration_sec?: number
+  min_clip_sentence_count?: number
+  max_clip_sentence_count?: number
 }
 
 export interface BilibiliDownloadTask {
@@ -264,6 +268,12 @@ export const projectApi = {
     }
     if (data.max_clip_duration_sec !== undefined) {
       formData.append('max_clip_duration_sec', String(data.max_clip_duration_sec))
+    }
+    if (data.min_clip_sentence_count !== undefined) {
+      formData.append('min_clip_sentence_count', String(data.min_clip_sentence_count))
+    }
+    if (data.max_clip_sentence_count !== undefined) {
+      formData.append('max_clip_sentence_count', String(data.max_clip_sentence_count))
     }
     
     try {
@@ -467,13 +477,21 @@ export const projectApi = {
     return api.post(`/projects/${projectId}/collections/${collectionId}/generate`)
   },
 
-  downloadVideo: async (projectId: string, clipId?: string, collectionId?: string) => {
+  downloadVideo: async (
+    projectId: string,
+    clipId?: string,
+    collectionId?: string,
+    asset: 'video' | 'subtitle' = 'video'
+  ) => {
     let url = `/projects/${projectId}/download`
+    const params = new URLSearchParams()
     if (clipId) {
-      url += `?clip_id=${clipId}`
+      params.set('clip_id', clipId)
     } else if (collectionId) {
-      url += `?collection_id=${collectionId}`
+      params.set('collection_id', collectionId)
     }
+    params.set('asset', asset)
+    url += `?${params.toString()}`
     
     try {
       // 对于blob类型的响应，需要直接使用axios而不是经过拦截器
@@ -486,9 +504,10 @@ export const projectApi = {
       
       // 从响应头获取文件名，如果没有则使用默认名称
       const contentDisposition = response.headers['content-disposition']
-      let filename = clipId ? `clip_${clipId}.mp4` : 
-                     collectionId ? `collection_${collectionId}.mp4` : 
-                     `project_${projectId}.mp4`
+      const extension = asset === 'subtitle' ? 'srt' : 'mp4'
+      let filename = clipId ? `clip_${clipId}.${extension}` :
+                     collectionId ? `collection_${collectionId}.${extension}` :
+                     `project_${projectId}.${extension}`
       
       if (contentDisposition) {
         // 优先尝试解析 RFC 6266 格式的 filename* 参数
@@ -505,7 +524,9 @@ export const projectApi = {
       }
       
       // 创建下载链接
-      const blob = new Blob([response.data], { type: 'video/mp4' })
+      const blob = new Blob([response.data], {
+        type: asset === 'subtitle' ? 'application/x-subrip' : 'video/mp4'
+      })
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { Card, Button, Tooltip, message } from 'antd'
+import { Card, Button, Tooltip, message, Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
 import { PlayCircleOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
@@ -9,7 +10,7 @@ interface CollectionCardProps {
   collection: Collection
   clips: Clip[]
   onView: (collection: Collection) => void
-  onGenerateVideo?: (collectionId: string) => void
+  onGenerateVideo?: (collectionId: string, asset?: 'video' | 'subtitle' | 'both') => void
   onDelete?: (collectionId: string) => void
   onUpdate?: (collectionId: string, updates: Partial<Collection>) => void
 }
@@ -47,6 +48,17 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
   }, [collection.project_id, collection.id, collection.created_at])
 
   const [imgError, setImgError] = useState(false)
+
+  const downloadMenuItems: MenuProps['items'] = [
+    { key: 'video', label: '下载视频' },
+    { key: 'subtitle', label: '下载字幕' },
+    { key: 'both', label: '下载视频+字幕' },
+  ]
+
+  const handleDownloadMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (!onGenerateVideo) return
+    onGenerateVideo(collection.id, key as 'video' | 'subtitle' | 'both')
+  }
 
   return (
     <Card
@@ -278,23 +290,24 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
             播放
           </Button>
           {onGenerateVideo && (
-            <Button 
-              type="text" 
-              size="small"
-              icon={<DownloadOutlined />}
-              onClick={() => onGenerateVideo(collection.id)}
-              style={{
-                color: 'var(--ac-sub)',
-                border: '1px solid var(--ac-line)',
-                borderRadius: '6px',
-                fontSize: '12px',
-                height: '28px',
-                padding: '0 12px',
-                background: 'transparent'
-              }}
-            >
-              下载
-            </Button>
+            <Dropdown menu={{ items: downloadMenuItems, onClick: handleDownloadMenuClick }} trigger={['click']}>
+              <Button
+                type="text"
+                size="small"
+                icon={<DownloadOutlined />}
+                style={{
+                  color: 'var(--ac-sub)',
+                  border: '1px solid var(--ac-line)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  height: '28px',
+                  padding: '0 12px',
+                  background: 'transparent'
+                }}
+              >
+                下载
+              </Button>
+            </Dropdown>
           )}
           <Button 
             type="text" 

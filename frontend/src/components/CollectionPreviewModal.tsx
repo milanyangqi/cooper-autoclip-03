@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Modal, Row, Col, Button, Space, Typography, Tag, message, Popconfirm } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { Modal, Row, Col, Button, Space, Typography, Tag, message, Popconfirm, Dropdown, type MenuProps } from 'antd'
+import { PlayCircleOutlined, DeleteOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
 import { Collection, Clip, useProjectStore } from '../store/useProjectStore'
@@ -182,14 +182,25 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
     }
   }
 
-  const handleGenerateVideo = async () => {
+  const handleGenerateVideo = async (asset: 'video' | 'subtitle' | 'both' = 'video') => {
     if (!latestCollection) return
-    
+
     await generateAndDownloadCollectionVideo(
-      projectId, 
-      latestCollection.id, 
-      latestCollection.collection_title
+      projectId,
+      latestCollection.id,
+      latestCollection.collection_title,
+      asset
     )
+  }
+
+  const collectionDownloadItems: MenuProps['items'] = [
+    { key: 'video', label: '下载视频' },
+    { key: 'subtitle', label: '下载字幕' },
+    { key: 'both', label: '下载视频+字幕' },
+  ]
+
+  const handleCollectionDownloadMenuClick: MenuProps['onClick'] = ({ key }) => {
+    handleGenerateVideo(key as 'video' | 'subtitle' | 'both')
   }
 
   const handleAddClips = async (selectedClipIds: string[]) => {
@@ -252,13 +263,15 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
           </div>
           <div className="header-right">
             <Space>
-              <Button 
-                type="primary" 
-                loading={isGenerating}
-                onClick={handleGenerateVideo}
-              >
-                导出完整视频
-              </Button>
+              <Dropdown menu={{ items: collectionDownloadItems, onClick: handleCollectionDownloadMenuClick }} trigger={['click']}>
+                <Button
+                  type="primary"
+                  loading={isGenerating}
+                  icon={<DownloadOutlined />}
+                >
+                  导出
+                </Button>
+              </Dropdown>
               <Button 
                 type="default" 
                 icon={<UploadOutlined />}

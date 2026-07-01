@@ -10,12 +10,15 @@ import {
   Spin, 
   Empty,
   message,
-  Radio
+  Radio,
+  Dropdown
 } from 'antd'
+import type { MenuProps } from 'antd'
 import { 
   ArrowLeftOutlined, 
   PlayCircleOutlined,
-  PlusOutlined
+  PlusOutlined,
+  DownloadOutlined
 } from '@ant-design/icons'
 import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
@@ -52,6 +55,38 @@ const ProjectDetailPage: React.FC = () => {
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
+
+  const handleProjectDownload = async (asset: 'video' | 'subtitle') => {
+    if (!currentProject) return
+    try {
+      await projectApi.downloadVideo(currentProject.id, undefined, undefined, asset)
+      message.success(asset === 'subtitle' ? '原片字幕下载完成' : '原片视频下载完成')
+    } catch (error) {
+      console.error('下载原片资源失败:', error)
+      message.error(asset === 'subtitle' ? '原片字幕下载失败' : '原片视频下载失败')
+    }
+  }
+
+  const handleProjectDownloadBoth = async () => {
+    await handleProjectDownload('video')
+    await handleProjectDownload('subtitle')
+  }
+
+  const projectDownloadItems: MenuProps['items'] = [
+    { key: 'video', label: '下载原片视频' },
+    { key: 'subtitle', label: '下载原片字幕' },
+    { key: 'both', label: '下载原片视频+字幕' },
+  ]
+
+  const handleProjectDownloadMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'subtitle') {
+      handleProjectDownload('subtitle')
+    } else if (key === 'both') {
+      handleProjectDownloadBoth()
+    } else {
+      handleProjectDownload('video')
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -262,6 +297,13 @@ const ProjectDetailPage: React.FC = () => {
         </div>
         
         <Space>
+          {currentProject.status === 'completed' && (
+            <Dropdown menu={{ items: projectDownloadItems, onClick: handleProjectDownloadMenuClick }} trigger={['click']}>
+              <Button icon={<DownloadOutlined />}>
+                下载原片
+              </Button>
+            </Dropdown>
+          )}
           {currentProject.status === 'pending' && (
             <Button 
               type="primary" 
@@ -330,13 +372,14 @@ const ProjectDetailPage: React.FC = () => {
                     onUpdate={(collectionId, updates) => 
                       updateCollection(currentProject.id, collectionId, updates)
                     }
-                    onGenerateVideo={async (collectionId) => {
+                    onGenerateVideo={async (collectionId, asset = 'video') => {
                       const collection = currentProject.collections?.find(c => c.id === collectionId)
                       if (collection) {
                         await generateAndDownloadCollectionVideo(
                           currentProject.id, 
                           collectionId, 
-                          collection.collection_title
+                          collection.collection_title,
+                          asset
                         )
                       }
                     }}
@@ -457,7 +500,7 @@ const ProjectDetailPage: React.FC = () => {
                     clip={clip}
                     projectId={currentProject.id}
                     videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
-                    onDownload={(clipId) => projectApi.downloadVideo(currentProject.id, clipId)}
+                    onDownload={(clipId, asset = 'video') => projectApi.downloadVideo(currentProject.id, clipId, undefined, asset)}
                     onClipUpdate={(clipId: string, updates: Partial<Clip>) => {
                       // 更新本地状态
                       if (currentProject) {

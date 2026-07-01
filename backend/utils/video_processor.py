@@ -153,16 +153,24 @@ class VideoProcessor:
             end_seconds = VideoProcessor.convert_ffmpeg_time_to_seconds(ffmpeg_end_time)
             duration = end_seconds - start_seconds
             
-            # 构建优化的FFmpeg命令
-            # 使用 -ss 在输入前进行精确定位，使用 -t 指定持续时间
+            if duration <= 0:
+                logger.error(f"无效的视频片段时长: {duration}")
+                return False
+
+            # 构建精确切割命令。重新编码可避免关键帧 copy 导致的起点漂移，
+            # 确保切片视频与按同一时间窗裁剪出的 SRT 保持同步。
             ffmpeg_bin = get_ffmpeg_path()
             cmd = [
                 ffmpeg_bin,
-                '-ss', ffmpeg_start_time,  # 在输入前定位，更精确
                 '-i', str(input_video),
+                '-ss', ffmpeg_start_time,
                 '-t', str(duration),  # 使用持续时间而不是绝对结束时间
-                '-c:v', 'copy',  # 复制视频流
-                '-c:a', 'copy',  # 复制音频流
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-crf', '23',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-movflags', '+faststart',
                 '-avoid_negative_ts', 'make_zero',
                 '-y',  # 覆盖输出文件
                 str(output_path)

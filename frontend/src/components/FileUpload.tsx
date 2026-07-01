@@ -20,6 +20,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
   const [targetClipCount, setTargetClipCount] = useState('')
   const [minClipDurationSec, setMinClipDurationSec] = useState('')
   const [maxClipDurationSec, setMaxClipDurationSec] = useState('')
+  const [minClipSentenceCount, setMinClipSentenceCount] = useState('')
+  const [maxClipSentenceCount, setMaxClipSentenceCount] = useState('')
   const [categories, setCategories] = useState<VideoCategory[]>([])
   const [, setLoadingCategories] = useState(false)
   const [files, setFiles] = useState<{
@@ -98,8 +100,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     const targetCount = parsePositiveInt(targetClipCount, '生成片段数量')
     const minDuration = parsePositiveInt(minClipDurationSec, '最短时长')
     const maxDuration = parsePositiveInt(maxClipDurationSec, '最长时长')
+    const minSentenceCount = parsePositiveInt(minClipSentenceCount, '最少句数')
+    const maxSentenceCount = parsePositiveInt(maxClipSentenceCount, '最多句数')
 
-    if (targetCount === null || minDuration === null || maxDuration === null) {
+    if (
+      targetCount === null ||
+      minDuration === null ||
+      maxDuration === null ||
+      minSentenceCount === null ||
+      maxSentenceCount === null
+    ) {
       return null
     }
 
@@ -107,11 +117,17 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       message.error('最短时长不能大于最长时长')
       return null
     }
+    if (minSentenceCount !== undefined && maxSentenceCount !== undefined && minSentenceCount > maxSentenceCount) {
+      message.error('最少句数不能大于最多句数')
+      return null
+    }
 
     const payload: Record<string, number> = {}
     if (targetCount !== undefined) payload.target_clip_count = targetCount
     if (minDuration !== undefined) payload.min_clip_duration_sec = minDuration
     if (maxDuration !== undefined) payload.max_clip_duration_sec = maxDuration
+    if (minSentenceCount !== undefined) payload.min_clip_sentence_count = minSentenceCount
+    if (maxSentenceCount !== undefined) payload.max_clip_sentence_count = maxSentenceCount
     return payload
   }
 
@@ -181,6 +197,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       // 重置状态
       setFiles({})
       setProjectName('')
+      setTargetClipCount('')
+      setMinClipDurationSec('')
+      setMaxClipDurationSec('')
+      setMinClipSentenceCount('')
+      setMaxClipSentenceCount('')
       setUploadProgress(0)
       setUploading(false)
       // 重置为默认分类
@@ -399,6 +420,44 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
                 placeholder="不限"
                 value={maxClipDurationSec}
                 onChange={(e) => setMaxClipDurationSec(e.target.value)}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'var(--ac-line-2)',
+                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  color: '#ffffff'
+                }}
+                disabled={uploading}
+              />
+            </div>
+            <div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最少句数</Text>
+              <Input
+                type="number"
+                min={1}
+                placeholder="不限"
+                value={minClipSentenceCount}
+                onChange={(e) => setMinClipSentenceCount(e.target.value)}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  background: 'var(--ac-line-2)',
+                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  color: '#ffffff'
+                }}
+                disabled={uploading}
+              />
+            </div>
+            <div>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', display: 'block', marginBottom: '6px' }}>最多句数</Text>
+              <Input
+                type="number"
+                min={1}
+                placeholder="不限"
+                value={maxClipSentenceCount}
+                onChange={(e) => setMaxClipSentenceCount(e.target.value)}
                 style={{
                   height: '40px',
                   borderRadius: '8px',

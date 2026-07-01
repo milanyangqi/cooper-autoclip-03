@@ -12,6 +12,7 @@ from collections import defaultdict
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..utils.clip_selection_config import normalize_clip_selection_config
+from ..utils.subtitle_sync import collect_overlapping_entries, find_project_input_srt, load_srt_entries
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,8 @@ class ClipScorer:
         self,
         scored_clips: List[Dict],
         selection_config: Optional[Dict[str, Any]] = None,
+        subtitle_entries: Optional[List[Dict[str, Any]]] = None,
+        subtitle_source_path: Optional[Path] = None,
         min_score_threshold: float = MIN_SCORE_THRESHOLD,
     ) -> List[Dict]:
         """按评分、时长和数量筛选最终进入后续步骤的片段。"""
@@ -188,11 +191,16 @@ class ClipScorer:
         target_count = normalized_config.get("target_clip_count")
         min_duration = normalized_config.get("min_clip_duration_sec")
         max_duration = normalized_config.get("max_clip_duration_sec")
+        min_sentence_count = normalized_config.get("min_clip_sentence_count")
+        max_sentence_count = normalized_config.get("max_clip_sentence_count")
         duration_filter_enabled = min_duration is not None or max_duration is not None
+        sentence_control_enabled = min_sentence_count is not None or max_sentence_count is not None
+        subtitle_entries = subtitle_entries or []
 
         selected_clips = []
         for clip in scored_clips:
             duration = self._duration_seconds(clip)
+            bounds = self._time_bounds_seconds(clip)
             if duration is not None:
                 clip["duration_seconds"] = round(duration, 2)
 
@@ -205,18 +213,57 @@ class ClipScorer:
                 continue
 
             selected_clip = dict(clip)
+            final_start_seconds = None
+            final_end_seconds = None
+            if bounds is not None:
+                final_start_seconds, final_end_seconds = bounds
+
             if max_duration is not None and duration > max_duration:
-                bounds = self._time_bounds_seconds(clip)
-                if bounds is None:
+                if final_start_seconds is None or final_end_seconds is None:
                     continue
 
-                start_seconds, _ = bounds
+                final_end_seconds = min(final_end_seconds, final_start_seconds + max_duration)
                 selected_clip["original_start_time"] = clip.get("start_time")
                 selected_clip["original_end_time"] = clip.get("end_time")
                 selected_clip["original_duration_seconds"] = round(duration, 2)
-                selected_clip["end_time"] = self._seconds_to_srt_time(start_seconds + max_duration)
-                selected_clip["duration_seconds"] = float(max_duration)
+                selected_clip["end_time"] = self._seconds_to_srt_time(final_end_seconds)
+                selected_clip["duration_seconds"] = round(final_end_seconds - final_start_seconds, 2)
                 selected_clip["was_truncated_by_clip_selection"] = True
+
+            if sentence_control_enabled:
+                selected_clip["sentence_range_applied"] = False
+                selected_clip["sentence_count"] = 0
+                if subtitle_source_path:
+                    selected_clip["subtitle_source_path"] = str(subtitle_source_path)
+                if min_sentence_count is not None:
+                    selected_clip["min_clip_sentence_count"] = min_sentence_count
+                if max_sentence_count is not None:
+                    selected_clip["max_clip_sentence_count"] = max_sentence_count
+
+                if (
+                    subtitle_entries
+                    and final_start_seconds is not None
+                    and final_end_seconds is not None
+                    and final_end_seconds > final_start_seconds
+                ):
+                    matched_entries = collect_overlapping_entries(
+                        subtitle_entries,
+                        final_start_seconds,
+                        final_end_seconds,
+                        max_entries=max_sentence_count,
+                    )
+                    selected_clip["sentence_count"] = len(matched_entries)
+                    selected_clip["sentence_range_applied"] = True
+                    selected_clip["sentence_count_below_min"] = (
+                        min_sentence_count is not None and len(matched_entries) < min_sentence_count
+                    )
+
+                    if matched_entries and max_sentence_count is not None:
+                        adjusted_end_seconds = min(final_end_seconds, float(matched_entries[-1]["end_seconds"]))
+                        if adjusted_end_seconds > final_start_seconds:
+                            final_end_seconds = adjusted_end_seconds
+                            selected_clip["end_time"] = self._seconds_to_srt_time(final_end_seconds)
+                            selected_clip["duration_seconds"] = round(final_end_seconds - final_start_seconds, 2)
 
             selected_clips.append(selected_clip)
 
@@ -230,13 +277,15 @@ class ClipScorer:
         selected_clips.sort(key=lambda x: self.text_processor.time_to_seconds(str(x.get('start_time', '00:00:00,000'))))
 
         logger.info(
-            "片段筛选完成: 原始=%s, 入选=%s, 评分阈值=%.2f, 数量上限=%s, 时长范围=%s-%s秒",
+            "片段筛选完成: 原始=%s, 入选=%s, 评分阈值=%.2f, 数量上限=%s, 时长范围=%s-%s秒, 句数范围=%s-%s",
             len(scored_clips),
             len(selected_clips),
             min_score_threshold,
             target_count or "自动",
             min_duration or "不限",
             max_duration or "不限",
+            min_sentence_count or "不限",
+            max_sentence_count or "不限",
         )
 
         return selected_clips
@@ -247,6 +296,7 @@ def run_step3_scoring(
     output_path: Optional[Path] = None,
     prompt_files: Dict = None,
     selection_config: Optional[Dict[str, Any]] = None,
+    subtitle_path: Optional[Path] = None,
     min_score_threshold: float = MIN_SCORE_THRESHOLD,
 ) -> List[Dict]:
     """
@@ -263,6 +313,11 @@ def run_step3_scoring(
     # 加载时间线数据
     with open(timeline_path, 'r', encoding='utf-8') as f:
         timeline_data = json.load(f)
+
+    if metadata_dir is None:
+        metadata_dir = METADATA_DIR
+    subtitle_source_path = subtitle_path or find_project_input_srt(metadata_dir)
+    subtitle_entries = load_srt_entries(subtitle_source_path)
     
     # 创建评分器
     scorer = ClipScorer(prompt_files)
@@ -274,13 +329,12 @@ def run_step3_scoring(
     high_score_clips = scorer.select_high_score_clips(
         scored_clips,
         selection_config=selection_config,
+        subtitle_entries=subtitle_entries,
+        subtitle_source_path=subtitle_source_path,
         min_score_threshold=min_score_threshold,
     )
     
     # 保存结果
-    if metadata_dir is None:
-        metadata_dir = METADATA_DIR
-    
     # 保存所有评分后的片段（用于调试和分析）
     all_scored_path = metadata_dir / "step3_all_scored.json"
     scorer.save_scores(scored_clips, all_scored_path)
