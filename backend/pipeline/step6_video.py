@@ -4,13 +4,16 @@ Step 6: 视频生成 - 根据聚类结果生成最终视频切片
 import json
 import logging
 import re
+import subprocess
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 # 导入依赖
 from ..utils.video_processor import VideoProcessor
 from ..utils.text_processor import TextProcessor
+from ..utils.ffmpeg_utils import get_ffprobe_path
 from ..utils.subtitle_sync import (
+    DEFAULT_SUBTITLE_TAIL_HOLD_SECONDS,
     collect_overlapping_entries,
     concatenate_srt_files,
     find_project_input_srt,
@@ -65,6 +68,52 @@ class VideoGenerator:
         except Exception:
             return float(clip.get("duration_seconds") or 0.0)
 
+    def _actual_media_duration_seconds(self, media_path: Optional[Path]) -> Optional[float]:
+        """读取实际生成文件的媒体时长，优先使用 audio/format 中较长者。"""
+        if not media_path or not media_path.exists():
+            return None
+
+        try:
+            result = subprocess.run(
+                [
+                    get_ffprobe_path(),
+                    "-v", "error",
+                    "-print_format", "json",
+                    "-show_format",
+                    "-show_streams",
+                    str(media_path),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                check=False,
+            )
+            if result.returncode != 0:
+                logger.warning(f"ffprobe 获取媒体时长失败: {media_path}, {result.stderr}")
+                return None
+
+            probe_data = json.loads(result.stdout or "{}")
+            candidates: List[float] = []
+
+            def add_duration(value: Any) -> None:
+                try:
+                    duration = float(value)
+                except (TypeError, ValueError):
+                    return
+                if duration > 0:
+                    candidates.append(duration)
+
+            add_duration((probe_data.get("format") or {}).get("duration"))
+            for stream in probe_data.get("streams") or []:
+                if stream.get("codec_type") == "audio":
+                    add_duration(stream.get("duration"))
+
+            return max(candidates) if candidates else None
+        except Exception as e:
+            logger.warning(f"读取实际媒体时长失败: {media_path}, {e}")
+            return None
+
     def generate_clips(
         self,
         clips_with_titles: List[Dict],
@@ -106,8 +155,12 @@ class VideoGenerator:
                 clip["video_path"] = str(clip_path)
 
             duration_seconds = self._duration_seconds(clip)
+            actual_media_duration = self._actual_media_duration_seconds(clip_path) if clip_path else None
+            if actual_media_duration:
+                duration_seconds = actual_media_duration
+                clip["actual_media_duration_seconds"] = round(actual_media_duration, 3)
             if duration_seconds:
-                clip["duration_seconds"] = round(duration_seconds, 2)
+                clip["duration_seconds"] = round(duration_seconds, 3)
 
             if not subtitle_entries:
                 continue
@@ -123,16 +176,28 @@ class VideoGenerator:
                     )
                 matched_entries = collect_overlapping_entries(subtitle_entries, start_seconds, subtitle_end_seconds)
                 subtitle_path = self._clip_subtitle_output_path(clip)
+                subtitle_tail_hold = (
+                    DEFAULT_SUBTITLE_TAIL_HOLD_SECONDS
+                    if actual_media_duration and end_seconds > subtitle_end_seconds
+                    else 0.0
+                )
+                last_subtitle_end_seconds = (
+                    start_seconds + actual_media_duration + subtitle_tail_hold
+                    if actual_media_duration and end_seconds > subtitle_end_seconds
+                    else None
+                )
                 subtitle_count = write_clipped_srt(
                     matched_entries,
                     subtitle_path,
                     start_seconds,
                     end_seconds,
                     extend_last_to_window_end=end_seconds > subtitle_end_seconds,
+                    last_subtitle_end_seconds=last_subtitle_end_seconds,
                 )
                 clip["subtitle_path"] = str(subtitle_path)
                 clip["subtitle_source_path"] = str(subtitle_source_path) if subtitle_source_path else None
                 clip["sentence_count"] = clip.get("sentence_count", subtitle_count)
+                clip["subtitle_tail_hold_seconds"] = subtitle_tail_hold
                 logger.info(f"切片 {clip_id} 同步字幕已生成: {subtitle_path}")
             except Exception as e:
                 logger.warning(f"切片 {clip_id} 同步字幕生成失败: {e}")

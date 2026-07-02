@@ -3,7 +3,9 @@
 from backend.pipeline.step3_scoring import ClipScorer
 from backend.utils.subtitle_sync import (
     DEFAULT_CLIP_TAIL_PADDING_SECONDS,
+    DEFAULT_SUBTITLE_TAIL_HOLD_SECONDS,
     build_sentence_groups,
+    concatenate_srt_files,
     collect_overlapping_sentence_groups,
     seconds_to_srt_time,
     write_clipped_srt,
@@ -156,3 +158,51 @@ def test_clipped_srt_can_extend_last_subtitle_to_video_end(tmp_path):
     content = output_path.read_text(encoding="utf-8")
     assert count == 2
     assert "00:00:04,500" in content
+
+
+def test_clipped_srt_can_hold_last_subtitle_past_video_window(tmp_path):
+    output_path = tmp_path / "clip.srt"
+    entries = [
+        _entry(1.0, 3.0, "First sentence."),
+        _entry(3.1, 5.0, "Second sentence."),
+    ]
+
+    count = write_clipped_srt(
+        entries,
+        output_path,
+        1.0,
+        5.5,
+        last_subtitle_end_seconds=5.5 + DEFAULT_SUBTITLE_TAIL_HOLD_SECONDS,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+    assert count == 2
+    assert "00:00:04,600" in content
+
+
+def test_collection_subtitles_clamp_clip_tail_hold_to_segment_duration(tmp_path):
+    clip_one = tmp_path / "clip_one.srt"
+    clip_two = tmp_path / "clip_two.srt"
+    output_path = tmp_path / "collection.srt"
+    clip_one.write_text(
+        "1\n00:00:00,000 --> 00:00:02,100\nFirst clip.\n",
+        encoding="utf-8",
+    )
+    clip_two.write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nSecond clip.\n",
+        encoding="utf-8",
+    )
+
+    count = concatenate_srt_files(
+        [
+            {"subtitle_path": str(clip_one), "duration_seconds": 2.0},
+            {"subtitle_path": str(clip_two), "duration_seconds": 1.0},
+        ],
+        output_path,
+    )
+
+    content = output_path.read_text(encoding="utf-8")
+    assert count == 2
+    assert "00:00:00,000 --> 00:00:02,000" in content
+    assert "00:00:02,000 --> 00:00:03,000" in content
+    assert "00:00:02,100" not in content

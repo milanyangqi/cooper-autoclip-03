@@ -7,6 +7,7 @@ from .text_processor import TextProcessor
 
 DEFAULT_SENTENCE_PAUSE_SECONDS = 1.0
 DEFAULT_CLIP_TAIL_PADDING_SECONDS = 0.5
+DEFAULT_SUBTITLE_TAIL_HOLD_SECONDS = 0.1
 SENTENCE_END_PUNCTUATION = ".?!。！？"
 TRAILING_SENTENCE_CLOSERS = "\"'”’)]）】》」』"
 
@@ -166,6 +167,7 @@ def write_clipped_srt(
     window_start: float,
     window_end: float,
     extend_last_to_window_end: bool = False,
+    last_subtitle_end_seconds: Optional[float] = None,
 ) -> int:
     """写出相对片段 0 秒起算的 SRT。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,10 +186,13 @@ def write_clipped_srt(
             "text": str(entry.get("text", "")).strip(),
         })
 
-    if extend_last_to_window_end and clipped_entries:
+    if extend_last_to_window_end and last_subtitle_end_seconds is None:
+        last_subtitle_end_seconds = window_end
+
+    if last_subtitle_end_seconds is not None and clipped_entries:
         clipped_entries[-1]["end_seconds"] = max(
             float(clipped_entries[-1]["end_seconds"]),
-            window_end,
+            float(last_subtitle_end_seconds),
         )
 
     count = 0
@@ -228,9 +233,15 @@ def concatenate_srt_files(
 
         max_entry_end = 0.0
         for entry in entries:
-            start = float(entry["start_seconds"]) + offset_seconds
-            end = float(entry["end_seconds"]) + offset_seconds
-            max_entry_end = max(max_entry_end, float(entry["end_seconds"]))
+            relative_start = float(entry["start_seconds"])
+            relative_end = float(entry["end_seconds"])
+            max_entry_end = max(max_entry_end, relative_end)
+            if duration > 0:
+                relative_start = min(relative_start, duration)
+                relative_end = min(relative_end, duration)
+
+            start = relative_start + offset_seconds
+            end = relative_end + offset_seconds
             if end <= start:
                 continue
 
